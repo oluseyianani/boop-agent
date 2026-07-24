@@ -407,6 +407,25 @@ export const getProfile = query({
   },
 });
 
+// All stored posts for a set of handles (competitor evidence for the idea
+// detail view), best-scoring first.
+export const postsForHandles = query({
+  args: { projectId: v.string(), handles: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const out = [];
+    for (const h of args.handles) {
+      const rows = await ctx.db
+        .query("contentPosts")
+        .withIndex("by_project_owner", (q) =>
+          q.eq("projectId", args.projectId).eq("ownerHandle", h.toLowerCase()),
+        )
+        .take(200);
+      out.push(...rows);
+    }
+    return out.sort((a, b) => b.score - a.score);
+  },
+});
+
 export const followerHistory = query({
   args: { projectId: v.string(), handle: v.string() },
   handler: async (ctx, args) => {

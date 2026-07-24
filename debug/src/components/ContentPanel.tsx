@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api.js";
+import { ContentDetailDrawer } from "./ContentDetailDrawer.js";
 import {
   EmptyState,
   HeaderPill,
@@ -110,7 +111,9 @@ export function ContentPanel({ isDark }: { isDark: boolean }) {
       key={projectId}
       isDark={isDark}
       projectId={projectId}
-      projects={projects.map((p: { projectId: string; name: string; config: string }) => p)}
+      projects={projects.map(
+        (p: { projectId: string; name: string; config: string; dmPlaybook?: string }) => p,
+      )}
       onSelectProject={setSelectedProject}
     />
   );
@@ -124,21 +127,35 @@ function ProjectView({
 }: {
   isDark: boolean;
   projectId: string;
-  projects: { projectId: string; name: string; config: string }[];
+  projects: { projectId: string; name: string; config: string; dmPlaybook?: string }[];
   onSelectProject: (id: string) => void;
 }) {
   const project = projects.find((p) => p.projectId === projectId)!;
+  const [detail, setDetail] = useState<{ ideaId: string; format?: string } | null>(null);
   const config = useMemo(() => {
     try {
-      return JSON.parse(project.config) as {
+      return JSON.parse(project.config) as Record<string, unknown> & {
         platforms?: string[];
         conceptsPerDay?: number;
         ideaCooldownDays?: number;
       };
     } catch {
-      return {};
+      return {} as Record<string, unknown> & {
+        platforms?: string[];
+        conceptsPerDay?: number;
+        ideaCooldownDays?: number;
+      };
     }
   }, [project.config]);
+  const dmPlaybook = useMemo(() => {
+    try {
+      return project.dmPlaybook
+        ? (JSON.parse(project.dmPlaybook) as { intent?: string; reply?: string }[])
+        : [];
+    } catch {
+      return [];
+    }
+  }, [project.dmPlaybook]);
   const platforms = config.platforms ?? ["instagram"];
   const cooldownDays = config.ideaCooldownDays ?? 14;
 
@@ -238,6 +255,7 @@ function ProjectView({
                     slot={slot}
                     platforms={platforms}
                     isDark={isDark}
+                    onOpen={() => setDetail({ ideaId: slot.ideaId, format: slot.format })}
                   />
                 ))}
               </div>
@@ -277,7 +295,10 @@ function ProjectView({
                     return (
                       <tr
                         key={idea.ideaId}
-                        className={`border-t ${isDark ? "border-white/5" : "border-zinc-100"}`}
+                        onClick={() => setDetail({ ideaId: idea.ideaId })}
+                        className={`cursor-pointer border-t ${
+                          isDark ? "border-white/5 hover:bg-white/5" : "border-zinc-100 hover:bg-zinc-50"
+                        }`}
                       >
                         <td className="py-2 pr-3">
                           <div className="font-medium">{idea.title}</div>
@@ -331,6 +352,37 @@ function ProjectView({
           )}
         </div>
       </section>
+
+      {dmPlaybook.length > 0 && (
+        <section className={panelCardClass(isDark, "p-4")}>
+          <h3 className="text-sm font-medium">DM playbook</h3>
+          <p className={`mt-0.5 text-xs ${mutedTextClass(isDark)}`}>
+            Ready-to-paste replies per comment/DM theme. Nothing auto-sends.
+          </p>
+          <div className="mt-3 space-y-1.5">
+            {dmPlaybook.map((p, i) => (
+              <div key={i} className={subtlePanelClass(isDark, "px-3 py-2 text-xs")}>
+                <div className={`mb-0.5 font-medium ${bodyTextClass(isDark)}`}>
+                  {p.intent ?? `template ${i + 1}`}
+                </div>
+                <div className={mutedTextClass(isDark)}>{p.reply}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {detail && (
+        <ContentDetailDrawer
+          isDark={isDark}
+          projectId={projectId}
+          projectConfig={config}
+          ideaId={detail.ideaId}
+          ideaRow={ideas?.find((i) => i.ideaId === detail.ideaId) ?? null}
+          highlightFormat={detail.format}
+          onClose={() => setDetail(null)}
+        />
+      )}
     </PanelPage>
   );
 }
@@ -477,10 +529,12 @@ function SlotCard({
   slot,
   platforms,
   isDark,
+  onOpen,
 }: {
   slot: SlotRow;
   platforms: string[];
   isDark: boolean;
+  onOpen: () => void;
 }) {
   const markPosted = useMutation(api.content.markSlotPosted);
   const [pending, setPending] = useState<string | null>(null);
@@ -495,7 +549,10 @@ function SlotCard({
   }
 
   return (
-    <div className={subtlePanelClass(isDark, "px-3 py-2")}>
+    <div
+      onClick={onOpen}
+      className={subtlePanelClass(isDark, "cursor-pointer px-3 py-2 hover:opacity-90")}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-xs">
@@ -530,7 +587,10 @@ function SlotCard({
                 key={platform}
                 type="button"
                 disabled={pending !== null}
-                onClick={() => handleMark(platform)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleMark(platform);
+                }}
                 className={`rounded-lg border px-2 py-1 text-[10px] font-medium disabled:opacity-50 ${
                   isDark
                     ? "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"

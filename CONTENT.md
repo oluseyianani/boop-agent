@@ -31,13 +31,20 @@ debug dashboard.
       audit trail is contentRuns (the step log on the Content tab).
 - [ ] Phase 3: retire the old content-agent cron on the server (engine
       replaces it; old repo remains the doctrine home)
-- [ ] Phase 4 (optional): content tools on the dispatcher
-      (get_today_slots, get_account_stats, mark_posted, list_ideas,
-      run_content_pipeline, toggle_content_engine) so chat/iMessage hits
-      live Convex truth and controls the engine; then Sendblue for texting
-      the desk. Recurring *agent-shaped* content work (e.g. Friday DM-draft
-      review) should use normal Boop automations once those tools exist —
-      the engine chassis stays reserved for the deterministic pipeline.
+- [x] Content tools on the dispatcher (`server/content/tools.ts`,
+      namespace boop-content): list_content_ideas (with ready/cooling
+      state), get_content_idea (hooks/script/UGC brief), get_content_slots,
+      mark_content_posted — texting Boop "two unposted ideas for Saturday"
+      now hits live Convex truth, no sub-agent.
+- [x] Detail views: ContentDetailDrawer (idea rows + slots open it) with
+      failure moment, hooks, faceless script, UGC brief, composed
+      generation prompts (composePrompt port in debug/src/lib/
+      contentPrompts.ts), assets, competitor evidence; DM playbook section.
+- [ ] Phase 4 remainder: engine-control tools (run_content_pipeline,
+      toggle_content_engine) if wanted. Recurring *agent-shaped* content
+      work (e.g. Friday DM-draft review) should use normal Boop
+      automations — the engine chassis stays reserved for the
+      deterministic pipeline.
 
 ## Setup
 
@@ -72,6 +79,8 @@ from this list:
 | `convex/schema.ts` | `import { contentTables } from "./contentSchema";` + `...contentTables,` as the first entry in `defineSchema({...})` |
 | `debug/src/App.tsx` | `Calendar03Icon` in the icon import; `ContentPanel` import; `"content"` in the `View` union; `content: Calendar03Icon` in `NAV_ICONS`; `{ id: "content", label: "Content" }` in `NAV`; `{view === "content" && <ContentPanel isDark={isDark} />}` in the render switch |
 | `server/index.ts` | `import { createContentRouter, startContentEngine } from "./content/index.js";`; `startContentEngine();` after the other `start*Loop()` calls; `app.use("/content", createContentRouter());` after the `/health` route |
+| `server/interaction-agent.ts` | `import { createContentTools } from "./content/tools.js";`; `...createContentTools(),` in the dispatcher's `tools` array; four `mcp__boop-content__*` entries in `allowedTools` |
+| `server/composio.ts` | `import { linkConnectedAccount } from "./composio-link.js";` + the call swap in `authorizeToolkit` (temporary — remove when upstream bumps the Composio SDK past the deprecated initiate endpoint) |
 
 Sync workflow:
 

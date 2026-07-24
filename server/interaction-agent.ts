@@ -6,6 +6,7 @@ import { extractAndStore } from "./memory/extract.js";
 import { spawnExecutionAgent } from "./execution-agent.js";
 import { listEnabledIntegrations } from "./integrations/registry.js";
 import { createAutomationTools } from "./automation-tools.js";
+import { createContentTools } from "./content/tools.js";
 import { createDraftDecisionTools } from "./draft-tools.js";
 import { createSelfTools } from "./self-tools.js";
 import {
@@ -451,6 +452,7 @@ export async function handleUserMessage(opts: HandleOpts): Promise<string> {
   const tools = [
     ...createMemoryTools(opts.conversationId),
     ...createAutomationTools(opts.conversationId),
+    ...createContentTools(),
     ...createDraftDecisionTools(opts.conversationId, runtimeConfig),
     ...createSelfTools(),
     defineRuntimeTool(
@@ -539,6 +541,10 @@ export async function handleUserMessage(opts: HandleOpts): Promise<string> {
               "mcp__boop-automations__list_automations",
               "mcp__boop-automations__toggle_automation",
               "mcp__boop-automations__delete_automation",
+              "mcp__boop-content__list_content_ideas",
+              "mcp__boop-content__get_content_idea",
+              "mcp__boop-content__get_content_slots",
+              "mcp__boop-content__mark_content_posted",
               "mcp__boop-draft-decisions__list_drafts",
               "mcp__boop-draft-decisions__send_draft",
               "mcp__boop-draft-decisions__reject_draft",
