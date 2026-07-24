@@ -32,6 +32,9 @@ trolley.oluseyi.dev {
 	handle /ws {
 		reverse_proxy localhost:3456 {
 			header_up Host localhost:3456
+			# browsers send Origin on WS upgrades; the server's local-access
+			# guard rejects non-local origins, so strip it
+			header_up -Origin
 			header_up -X-Forwarded-For
 			header_up -X-Forwarded-Host
 			header_up -X-Forwarded-Proto
