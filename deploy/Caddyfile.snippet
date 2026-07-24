@@ -3,28 +3,33 @@
 # SECRET HYGIENE: the bcrypt hash lives ONLY in /etc/caddy/Caddyfile on the
 # server. Never commit a real hash here — keep the placeholder.
 #
-# The dashboard calls every backend route through /api/* and the Vite dev
-# server STRIPS that prefix before proxying (debug/vite.config.ts) — the
-# /api handle below mirrors that rewrite in production. /ws is the
-# WebSocket (no rewrite).
-#
-# The header_up lines make proxied requests look local to Boop's
-# local-access guard — safe because Caddy's basic_auth has already
-# authenticated the caller.
+# Layout:
+# - /sendblue/webhook and /composio/webhook are PUBLIC (no basic auth): the
+#   server verifies Sendblue's signature / Composio's HMAC itself and treats
+#   exactly these paths as public (isPublicServerRequest).
+# - /api/* mirrors the Vite dev proxy: prefix stripped, Origin and
+#   X-Forwarded-* scrubbed so requests look local to Boop's guard (safe —
+#   basic_auth has already gated the caller).
+# - /ws is the WebSocket, same scrubbing.
+# - Everything else: the static dashboard build.
 #
 # After editing: sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
 
 trolley.oluseyi.dev {
-	basic_auth {
-		oluseyi KEEP_EXISTING_HASH_HERE
+	handle /sendblue/webhook {
+		reverse_proxy localhost:3456
+	}
+	handle /composio/webhook {
+		reverse_proxy localhost:3456
 	}
 
 	handle /api/* {
+		basic_auth {
+			oluseyi KEEP_EXISTING_HASH_HERE
+		}
 		uri strip_prefix /api
 		reverse_proxy localhost:3456 {
 			header_up Host localhost:3456
-			# browsers send Origin on every POST; the local-access guard
-			# rejects non-local origins — strip it (basic_auth is the gate)
 			header_up -Origin
 			header_up -X-Forwarded-For
 			header_up -X-Forwarded-Host
@@ -33,10 +38,11 @@ trolley.oluseyi.dev {
 	}
 
 	handle /ws {
+		basic_auth {
+			oluseyi KEEP_EXISTING_HASH_HERE
+		}
 		reverse_proxy localhost:3456 {
 			header_up Host localhost:3456
-			# browsers send Origin on WS upgrades; the server's local-access
-			# guard rejects non-local origins, so strip it
 			header_up -Origin
 			header_up -X-Forwarded-For
 			header_up -X-Forwarded-Host
@@ -45,6 +51,9 @@ trolley.oluseyi.dev {
 	}
 
 	handle {
+		basic_auth {
+			oluseyi KEEP_EXISTING_HASH_HERE
+		}
 		root * /home/oluseyi/apps/boop-agent/debug/dist
 		try_files {path} /index.html
 		file_server

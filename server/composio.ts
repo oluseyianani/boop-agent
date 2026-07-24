@@ -3,6 +3,7 @@ import { Composio as ComposioApiClient } from "@composio/client";
 import { ClaudeAgentSDKProvider } from "@composio/claude-agent-sdk";
 import { createSdkMcpServer, type McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import type { IntegrationModule } from "./integrations/registry.js";
+import { linkConnectedAccount } from "./composio-link.js";
 import { formatError } from "./error-format.js";
 import { runtimeText, type RuntimeTool } from "./runtimes/types.js";
 
@@ -536,17 +537,11 @@ export async function authorizeToolkit(
     }
   }
 
-  // 2. Initiate the connection. allowMultiple if there's already an active connection
-  //    so we add another account instead of replacing.
-  const existing = (await listConnectedToolkits()).filter(
-    (c) => c.slug === slug && c.status === "ACTIVE",
-  );
-  const conn = await composio.connectedAccounts.initiate(boopUserId(), authConfigId, {
-    ...(existing.length > 0 ? { allowMultiple: true } : {}),
-    ...(opts?.callbackUrl ? { callbackUrl: opts.callbackUrl } : {}),
-    ...(opts?.alias ? { alias: opts.alias } : {}),
-  });
-  return { redirectUrl: conn.redirectUrl ?? null, connectionId: conn.id };
+  // 2. Initiate the connection. Composio deprecated connectedAccounts
+  //    .initiate()'s endpoint (400: "use /connected_accounts/link") — go
+  //    through the fork-local shim until upstream bumps the SDK.
+  const conn = await linkConnectedAccount(authConfigId, boopUserId(), opts?.callbackUrl);
+  return { redirectUrl: conn.redirectUrl, connectionId: conn.connectionId };
 }
 
 export async function disconnectToolkit(connectionId: string): Promise<void> {
