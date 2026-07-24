@@ -390,7 +390,7 @@ function EngineCard({ isDark, projectId }: { isDark: boolean; projectId: string 
         <div>
           <h3 className="text-sm font-medium">Weekly engine</h3>
           <p className={`mt-0.5 text-xs ${mutedTextClass(isDark)}`}>
-            Pull → auto-match → bank refresh → plan → digest.{" "}
+            Pull → auto-match → bank refresh → plan → summary memory → digest.{" "}
             {engine
               ? engine.armed
                 ? `Scheduled ${engine.schedule} (${engine.timezone}).`

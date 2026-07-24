@@ -22,10 +22,22 @@ debug dashboard.
       systemd unit); "Run now" + enable toggle in the Content tab.
       Env: `APIFY_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
       optional `CONTENT_DOCTRINE_DIR` / `CONTENT_CRON` / `REFRESH_MODEL`.
+- [x] Weekly summary memory: each run writes ONE distilled memory (project
+      segment, long tier) superseding last week's, so chat is content-aware.
+      This is the only content→memory bridge by design: raw pull rows stay
+      in structured tables (memory recall would be polluted and the daily
+      consolidation pipeline would burn tokens compressing row data that
+      Convex already stores). The Events tab stays memory-only; the engine's
+      audit trail is contentRuns (the step log on the Content tab).
 - [ ] Phase 3: retire the old content-agent cron on the server (engine
       replaces it; old repo remains the doctrine home)
-- [ ] Phase 4 (optional): iMessage the desk via the interaction agent
-      (content tools: today's slots, mark posted, draft DM replies)
+- [ ] Phase 4 (optional): content tools on the dispatcher
+      (get_today_slots, get_account_stats, mark_posted, list_ideas,
+      run_content_pipeline, toggle_content_engine) so chat/iMessage hits
+      live Convex truth and controls the engine; then Sendblue for texting
+      the desk. Recurring *agent-shaped* content work (e.g. Friday DM-draft
+      review) should use normal Boop automations once those tools exist —
+      the engine chassis stays reserved for the deterministic pipeline.
 
 ## Setup
 

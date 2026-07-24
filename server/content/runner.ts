@@ -14,6 +14,7 @@ import { pullProject } from "./pull.js";
 import { autoMatch } from "./match.js";
 import { refreshBank } from "./refresh.js";
 import { planWeek } from "./planner.js";
+import { writeWeeklySummary } from "./summary.js";
 import { sendDigest } from "./digest.js";
 import { parseConfig, type ContentProjectRow, type StepResult } from "./types.js";
 
@@ -66,6 +67,9 @@ export async function runPipeline(
         // generation keeps the existing bank and the pipeline continues.
         await step("refresh", () => refreshBank(project, config), true);
         await step("plan", () => planWeek(project.projectId, config));
+        // One distilled memory per run (supersedes last week's) so chatting
+        // with Boop is content-aware; raw rows stay in the content tables.
+        await step("summary", () => writeWeeklySummary(project, config), true);
         await step("digest", () => sendDigest(project.projectId, config, project.name, steps), true);
         await convex.mutation(api.content.updateContentRun, {
           runId,

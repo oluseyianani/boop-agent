@@ -407,6 +407,21 @@ export const getProfile = query({
   },
 });
 
+export const followerHistory = query({
+  args: { projectId: v.string(), handle: v.string() },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("contentProfileSnapshots")
+      .withIndex("by_project_handle", (q) =>
+        q.eq("projectId", args.projectId).eq("handle", args.handle),
+      )
+      .take(SCAN_LIMIT);
+    return rows
+      .sort((a, b) => a.fetchedAt - b.fetchedAt)
+      .map((r) => ({ followers: r.followers ?? null, at: r.fetchedAt }));
+  },
+});
+
 export const logShortcodes = query({
   args: { projectId: v.string() },
   handler: async (ctx, args) => {
