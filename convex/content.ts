@@ -395,6 +395,16 @@ export const listPosts = query({
   },
 });
 
+export const listProfiles = query({
+  args: { projectId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("contentProfiles")
+      .withIndex("by_project_handle", (q) => q.eq("projectId", args.projectId))
+      .take(50);
+  },
+});
+
 export const getProfile = query({
   args: { projectId: v.string(), handle: v.string() },
   handler: async (ctx, args) => {

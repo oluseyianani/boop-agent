@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api.js";
 import { ContentDetailDrawer } from "./ContentDetailDrawer.js";
+import { AnalystSection } from "./ContentAnalyst.js";
 import {
   EmptyState,
   HeaderPill,
@@ -229,6 +230,13 @@ function ProjectView({
       }
     >
       <EngineCard isDark={isDark} projectId={projectId} />
+
+      <AnalystSection
+        isDark={isDark}
+        projectId={projectId}
+        ownHandle={(config.instagramHandle as string) ?? ""}
+        competitors={(config.competitors as { handle: string; why?: string }[]) ?? []}
+      />
 
       <section className={panelCardClass(isDark, "p-4")}>
         <h3 className="text-sm font-medium">This week</h3>

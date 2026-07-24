@@ -29,8 +29,16 @@ debug dashboard.
       consolidation pipeline would burn tokens compressing row data that
       Convex already stores). The Events tab stays memory-only; the engine's
       audit trail is contentRuns (the step log on the Content tab).
-- [ ] Phase 3: retire the old content-agent cron on the server (engine
-      replaces it; old repo remains the doctrine home)
+- [x] Phase 3 (2026-07-25): old content-agent Monday cron retired on
+      trolley after the engine's first fully green run. The old repo is now
+      doctrine-only (its nightly data.db backup cron remains, harmless).
+- [x] Analyst section in the Content tab: follower sparkline + delta,
+      competitor benchmark (avg top score, video share, posts/week),
+      generated-vs-posted weekly bars — all from Convex pull data.
+- [x] "content" spawnable integration (server/content/integration.ts):
+      execution agents and automations can use the content tools. First
+      user: the "Friday content review" automation (Fridays 16:00
+      Europe/London, notifies iMessage).
 - [x] Content tools on the dispatcher (`server/content/tools.ts`,
       namespace boop-content): list_content_ideas (with ready/cooling
       state), get_content_idea (hooks/script/UGC brief), get_content_slots,
@@ -81,6 +89,7 @@ from this list:
 | `server/index.ts` | `import { createContentRouter, startContentEngine } from "./content/index.js";`; `startContentEngine();` after the other `start*Loop()` calls; `app.use("/content", createContentRouter());` after the `/health` route |
 | `server/interaction-agent.ts` | `import { createContentTools } from "./content/tools.js";`; `...createContentTools(),` in the dispatcher's `tools` array; four `mcp__boop-content__*` entries in `allowedTools` |
 | `server/composio.ts` | `import { linkConnectedAccount } from "./composio-link.js";` + the call swap in `authorizeToolkit` (temporary — remove when upstream bumps the Composio SDK past the deprecated initiate endpoint) |
+| `server/integrations/registry.ts` | two lines in `loadIntegrations()`: import + `registerContentIntegration();` (must live here so it survives `refreshIntegrations()`) |
 
 Sync workflow:
 
