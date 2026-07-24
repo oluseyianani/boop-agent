@@ -23,6 +23,9 @@ trolley.oluseyi.dev {
 		uri strip_prefix /api
 		reverse_proxy localhost:3456 {
 			header_up Host localhost:3456
+			# browsers send Origin on every POST; the local-access guard
+			# rejects non-local origins — strip it (basic_auth is the gate)
+			header_up -Origin
 			header_up -X-Forwarded-For
 			header_up -X-Forwarded-Host
 			header_up -X-Forwarded-Proto
