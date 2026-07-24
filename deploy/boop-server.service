@@ -12,6 +12,9 @@ After=network.target
 User=oluseyi
 WorkingDirectory=/home/oluseyi/apps/boop-agent
 Environment=PORT=3456
+# Arms the weekly content engine (Mondays 08:00 Europe/London). Only this
+# server sets it, so a Mac dev instance can never double-fire the pipeline.
+Environment=CONTENT_ENGINE=1
 ExecStart=/usr/bin/node node_modules/.bin/tsx server/index.ts
 Restart=always
 RestartSec=5

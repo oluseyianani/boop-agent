@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api.js";
 import {
@@ -43,6 +43,23 @@ interface LogRow {
   platform: string;
   source: string;
   postedAt: number;
+}
+
+interface RunRow {
+  runId: string;
+  trigger: string;
+  status: "running" | "completed" | "failed";
+  steps?: string;
+  error?: string;
+  startedAt: number;
+  completedAt?: number;
+}
+
+interface EngineStatus {
+  armed: boolean;
+  schedule: string;
+  timezone: string;
+  running: boolean;
 }
 
 type Usage = Record<
@@ -194,6 +211,8 @@ function ProjectView({
         )
       }
     >
+      <EngineCard isDark={isDark} projectId={projectId} />
+
       <section className={panelCardClass(isDark, "p-4")}>
         <h3 className="text-sm font-medium">This week</h3>
         <p className={`mt-0.5 text-xs ${mutedTextClass(isDark)}`}>
@@ -313,6 +332,144 @@ function ProjectView({
         </div>
       </section>
     </PanelPage>
+  );
+}
+
+function EngineCard({ isDark, projectId }: { isDark: boolean; projectId: string }) {
+  const [engine, setEngine] = useState<EngineStatus | null>(null);
+  const [triggering, setTriggering] = useState(false);
+  const enabledSetting = useQuery(api.settings.get, { key: "content_engine_enabled" }) as
+    | string
+    | null
+    | undefined;
+  const setSetting = useMutation(api.settings.set);
+  const runs = useQuery(api.content.recentContentRuns, { projectId, limit: 5 }) as
+    | RunRow[]
+    | undefined;
+  const enabled = enabledSetting !== "false";
+  const latest = runs?.[0];
+  const latestSteps: { step: string; ok: boolean; detail: string }[] = useMemo(() => {
+    try {
+      return latest?.steps ? JSON.parse(latest.steps) : [];
+    } catch {
+      return [];
+    }
+  }, [latest?.steps]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/content/engine", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => {
+        if (!cancelled) setEngine(s);
+      })
+      .catch(() => {
+        if (!cancelled) setEngine(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [latest?.status]);
+
+  async function runNow() {
+    setTriggering(true);
+    try {
+      await fetch("/api/content/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+    } finally {
+      setTriggering(false);
+    }
+  }
+
+  return (
+    <section className={panelCardClass(isDark, "p-4")}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium">Weekly engine</h3>
+          <p className={`mt-0.5 text-xs ${mutedTextClass(isDark)}`}>
+            Pull → auto-match → bank refresh → plan → digest.{" "}
+            {engine
+              ? engine.armed
+                ? `Scheduled ${engine.schedule} (${engine.timezone}).`
+                : "Not armed on this server (manual runs only)."
+              : "Engine status unavailable."}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSetting({ key: "content_engine_enabled", value: enabled ? "false" : "true" })}
+            className={`rounded-lg border px-2 py-1 text-[11px] font-medium ${
+              enabled
+                ? isDark
+                  ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : isDark
+                  ? "border-white/10 bg-white/5 text-zinc-500"
+                  : "border-zinc-200 bg-zinc-50 text-zinc-500"
+            }`}
+            title="Applies to scheduled runs; manual runs always work"
+          >
+            {enabled ? "enabled" : "disabled"}
+          </button>
+          <button
+            type="button"
+            disabled={triggering || latest?.status === "running"}
+            onClick={runNow}
+            className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium disabled:opacity-50 ${
+              isDark
+                ? "border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10"
+                : "border-zinc-200 bg-zinc-50 text-zinc-900 hover:bg-zinc-100"
+            }`}
+          >
+            {latest?.status === "running" ? "running…" : "Run now"}
+          </button>
+        </div>
+      </div>
+
+      {latest && (
+        <div className={subtlePanelClass(isDark, "mt-3 px-3 py-2 text-xs")}>
+          <div className="flex items-center justify-between gap-2">
+            <span className={bodyTextClass(isDark)}>
+              Last run: <span className="mono">{latest.trigger}</span> ·{" "}
+              {new Date(latest.startedAt).toLocaleString("en-GB", {
+                day: "numeric",
+                month: "short",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+            <span
+              className={
+                latest.status === "completed"
+                  ? "text-emerald-500"
+                  : latest.status === "failed"
+                    ? "text-rose-400"
+                    : "text-amber-400"
+              }
+            >
+              {latest.status}
+            </span>
+          </div>
+          {latestSteps.length > 0 && (
+            <ul className={`mt-1.5 space-y-0.5 ${mutedTextClass(isDark)}`}>
+              {latestSteps.map((s) => (
+                <li key={s.step}>
+                  <span className={s.ok ? "text-emerald-500" : "text-rose-400"}>
+                    {s.ok ? "✓" : "✗"}
+                  </span>{" "}
+                  {s.step}: {s.detail}
+                </li>
+              ))}
+            </ul>
+          )}
+          {latest.error && <div className="mt-1 text-rose-400">{latest.error}</div>}
+        </div>
+      )}
+    </section>
   );
 }
 

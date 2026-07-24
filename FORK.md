@@ -83,7 +83,38 @@ Redeploy after code changes:
 cd ~/apps/boop-agent && git pull && npm ci && npm run build:debug && sudo systemctl restart boop-server
 ```
 
-## Migration state and the bridge
+## Phase 2 on trolley: the weekly engine
+
+The engine (pull → match → refresh → plan → digest) lives in
+`server/content/` and replaces the old repo's Monday cron. Deploying it:
+
+```bash
+# on trolley
+cd ~/apps/boop-agent && git pull && npm ci && npm run build:debug
+# append the engine's secrets to .env.local (values from the old
+# ~/apps/content-agent/.env — APIFY_TOKEN, TELEGRAM_BOT_TOKEN,
+# TELEGRAM_CHAT_ID):
+grep -E "^(APIFY_TOKEN|TELEGRAM_BOT_TOKEN|TELEGRAM_CHAT_ID)=" \
+  ~/apps/content-agent/.env >> ~/apps/boop-agent/.env.local
+sudo cp deploy/boop-server.service /etc/systemd/system/   # now sets CONTENT_ENGINE=1
+sudo systemctl daemon-reload && sudo systemctl restart boop-server
+```
+
+From the Mac (the Convex schema changed, so regenerate + re-copy types):
+
+```bash
+scp -r ~/www/boop-agent/convex/_generated oluseyi@167.233.223.193:apps/boop-agent/convex/
+```
+
+Then **retire the old cron** (phase 3): `crontab -e`, delete the Monday
+bridge line (keep the nightly data.db backup line until comfortable).
+The doctrine files in `~/apps/content-agent` stay — the refresh step
+reads them at run time (override location with `CONTENT_DOCTRINE_DIR`).
+
+Verify: Content tab → Weekly engine card shows "Scheduled 0 8 * * 1
+(Europe/London)" → hit **Run now** and watch the step log fill in live.
+
+## Migration state and the bridge (historical — superseded by phase 2)
 
 Phase 1 replaces the old desk's **dashboard** (the old serve.js on :4611
 is decommissioned). The old desk's **weekly engine** (Apify pull → Claude

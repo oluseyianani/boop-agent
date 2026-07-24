@@ -31,6 +31,7 @@ import {
 } from "./runtime-config.js";
 import { startImageCleanup } from "./images/clean.js";
 import { isPublicServerRequest, isTrustedLocalRequest } from "./local-access.js";
+import { createContentRouter, startContentEngine } from "./content/index.js";
 
 async function main() {
   await loadIntegrations();
@@ -39,6 +40,7 @@ async function main() {
   startHeartbeatLoop();
   startConsolidationLoop();
   startImageCleanup();
+  startContentEngine();
   // No-op when a paid embedding key is set; otherwise downloads/loads the
   // local BGE-large model in the background so the first user-facing
   // recall() doesn't pay the model-load cost.
@@ -74,6 +76,8 @@ async function main() {
   app.get("/health", (_req, res) => {
     res.json({ ok: true, service: "boop-agent" });
   });
+
+  app.use("/content", createContentRouter());
 
   app.get("/runtime-config", async (_req, res) => {
     try {

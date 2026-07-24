@@ -85,4 +85,74 @@ export const contentTables = {
     .index("by_project", ["projectId"])
     .index("by_project_idea", ["projectId", "ideaId"])
     .index("by_shortcode", ["shortcode"]),
+
+  // Scraped Instagram posts (own + competitors). Score = views for video,
+  // likes+comments otherwise — same ranking the old desk used.
+  contentPosts: defineTable({
+    projectId: v.string(),
+    shortcode: v.string(),
+    ownerHandle: v.string(),
+    url: v.optional(v.string()),
+    type: v.optional(v.string()),
+    caption: v.optional(v.string()),
+    hashtags: v.optional(v.string()), // JSON array
+    likes: v.number(),
+    comments: v.number(),
+    views: v.optional(v.number()),
+    score: v.number(),
+    postedAt: v.optional(v.number()),
+    displayUrl: v.optional(v.string()),
+    fetchedAt: v.number(),
+  })
+    .index("by_project_owner", ["projectId", "ownerHandle"])
+    .index("by_project_shortcode", ["projectId", "shortcode"]),
+
+  // Current profile state per handle; snapshots feed follower-growth charts.
+  contentProfiles: defineTable({
+    projectId: v.string(),
+    handle: v.string(),
+    username: v.optional(v.string()),
+    fullName: v.optional(v.string()),
+    followers: v.optional(v.number()),
+    following: v.optional(v.number()),
+    postsCount: v.optional(v.number()),
+    biography: v.optional(v.string()),
+    profilePicUrl: v.optional(v.string()),
+    source: v.optional(v.string()),
+    fetchedAt: v.number(),
+  }).index("by_project_handle", ["projectId", "handle"]),
+
+  contentProfileSnapshots: defineTable({
+    projectId: v.string(),
+    handle: v.string(),
+    followers: v.optional(v.number()),
+    following: v.optional(v.number()),
+    postsCount: v.optional(v.number()),
+    fetchedAt: v.number(),
+  }).index("by_project_handle", ["projectId", "handle"]),
+
+  // Every pull attempt (ok | fallback | blocked) — drives freshness TTLs
+  // and blocked-handle cooldowns exactly like the old pulls table.
+  contentPulls: defineTable({
+    projectId: v.string(),
+    kind: v.union(v.literal("profile"), v.literal("posts")),
+    handle: v.string(),
+    status: v.union(v.literal("ok"), v.literal("fallback"), v.literal("blocked")),
+    items: v.number(),
+    fetchedAt: v.number(),
+  }).index("by_project_kind_handle", ["projectId", "kind", "handle"]),
+
+  // One row per weekly-engine run (manual or scheduled) for the Content tab.
+  contentRuns: defineTable({
+    runId: v.string(),
+    projectId: v.string(),
+    trigger: v.union(v.literal("schedule"), v.literal("manual")),
+    status: v.union(v.literal("running"), v.literal("completed"), v.literal("failed")),
+    steps: v.optional(v.string()), // JSON: [{step, ok, detail}]
+    error: v.optional(v.string()),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_run_id", ["runId"])
+    .index("by_project", ["projectId"]),
 };
