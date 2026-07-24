@@ -8,6 +8,7 @@ import {
   Activity01Icon,
   Link04Icon,
   DashboardSquare01Icon,
+  Calendar03Icon,
   ArrowShrink02Icon,
   Settings01Icon,
   Moon02Icon,
@@ -23,6 +24,7 @@ import { EventsPanel } from "./components/EventsPanel.js";
 import { ConnectionsPanel } from "./components/ConnectionsPanel.js";
 import { ConsolidationPanel } from "./components/ConsolidationPanel.js";
 import { SettingsPanel } from "./components/SettingsPanel.js";
+import { ContentPanel } from "./components/ContentPanel.js";
 import { ChangelogDrawer } from "./components/ChangelogDrawer.js";
 import { RuntimeProviderLogo, type RuntimeProvider } from "./lib/branding.js";
 import boopGif from "../../assets/boop.gif";
@@ -31,6 +33,7 @@ type View =
   | "dashboard"
   | "agents"
   | "automations"
+  | "content"
   | "memory"
   | "events"
   | "consolidation"
@@ -88,6 +91,7 @@ const NAV_ICONS: Record<View, any> = {
   dashboard: DashboardSquare01Icon,
   agents: MachineRobotIcon,
   automations: WorkflowCircle03Icon,
+  content: Calendar03Icon,
   memory: AiBrain02Icon,
   events: Activity01Icon,
   consolidation: ArrowShrink02Icon,
@@ -99,6 +103,7 @@ const NAV: { id: View; label: string }[] = [
   { id: "dashboard", label: "Dashboard" },
   { id: "agents", label: "Agents" },
   { id: "automations", label: "Automations" },
+  { id: "content", label: "Content" },
   { id: "memory", label: "Memory" },
   { id: "events", label: "Events" },
   { id: "consolidation", label: "Consolidation" },
@@ -386,6 +391,7 @@ export function App() {
             {view === "dashboard" && <DashboardPanel isDark={isDark} />}
             {view === "agents" && <AgentsPanel isDark={isDark} />}
             {view === "automations" && <AutomationsPanel isDark={isDark} />}
+            {view === "content" && <ContentPanel isDark={isDark} />}
             {view === "memory" && (
               <MemoryPanel isDark={isDark} demoMode={demoModeEnabled} />
             )}
