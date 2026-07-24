@@ -1,11 +1,16 @@
-# Replaces the old trolley.oluseyi.dev block in /etc/caddy/Caddyfile.
-# Keep the existing bcrypt hash from the current Caddyfile (basic auth is
-# the public gate for the whole dashboard).
+# Replaces the trolley.oluseyi.dev block in /etc/caddy/Caddyfile.
 #
-# The header_up lines make proxied requests look local to the Boop server —
-# its WebSocket/local-access guard rejects requests that carry a public
-# Host or forwarded headers. Safe here because Caddy's basic_auth has
-# already authenticated the caller.
+# SECRET HYGIENE: the bcrypt hash lives ONLY in /etc/caddy/Caddyfile on the
+# server. Never commit a real hash here — keep the placeholder.
+#
+# The dashboard calls every backend route through /api/* and the Vite dev
+# server STRIPS that prefix before proxying (debug/vite.config.ts) — the
+# /api handle below mirrors that rewrite in production. /ws is the
+# WebSocket (no rewrite).
+#
+# The header_up lines make proxied requests look local to Boop's
+# local-access guard — safe because Caddy's basic_auth has already
+# authenticated the caller.
 #
 # After editing: sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
 
@@ -14,8 +19,17 @@ trolley.oluseyi.dev {
 		oluseyi KEEP_EXISTING_HASH_HERE
 	}
 
-	@backend path /api/* /ws /chat /health /agents/* /composio/* /browser/* /memory/* /consolidate /sendblue/*
-	handle @backend {
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy localhost:3456 {
+			header_up Host localhost:3456
+			header_up -X-Forwarded-For
+			header_up -X-Forwarded-Host
+			header_up -X-Forwarded-Proto
+		}
+	}
+
+	handle /ws {
 		reverse_proxy localhost:3456 {
 			header_up Host localhost:3456
 			header_up -X-Forwarded-For
