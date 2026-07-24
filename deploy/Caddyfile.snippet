@@ -1,0 +1,32 @@
+# Replaces the old trolley.oluseyi.dev block in /etc/caddy/Caddyfile.
+# Keep the existing bcrypt hash from the current Caddyfile (basic auth is
+# the public gate for the whole dashboard).
+#
+# The header_up lines make proxied requests look local to the Boop server —
+# its WebSocket/local-access guard rejects requests that carry a public
+# Host or forwarded headers. Safe here because Caddy's basic_auth has
+# already authenticated the caller.
+#
+# After editing: sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
+
+trolley.oluseyi.dev {
+	basic_auth {
+		oluseyi KEEP_EXISTING_HASH_HERE
+	}
+
+	@backend path /api/* /ws /chat /health /agents/* /composio/* /browser/* /memory/* /consolidate /sendblue/*
+	handle @backend {
+		reverse_proxy localhost:3456 {
+			header_up Host localhost:3456
+			header_up -X-Forwarded-For
+			header_up -X-Forwarded-Host
+			header_up -X-Forwarded-Proto
+		}
+	}
+
+	handle {
+		root * /home/oluseyi/apps/boop-agent/debug/dist
+		try_files {path} /index.html
+		file_server
+	}
+}

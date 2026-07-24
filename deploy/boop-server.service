@@ -1,0 +1,20 @@
+# Boop server on trolley (port 3456). Install:
+#   sudo cp deploy/boop-server.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now boop-server
+# Requires ~/apps/boop-agent/.env.local and convex/_generated (copied from
+# the Mac — see FORK.md "Deploying to trolley").
+
+[Unit]
+Description=Boop agent server (content desk fork)
+After=network.target
+
+[Service]
+User=oluseyi
+WorkingDirectory=/home/oluseyi/apps/boop-agent
+Environment=PORT=3456
+ExecStart=/usr/bin/node node_modules/.bin/tsx server/index.ts
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
