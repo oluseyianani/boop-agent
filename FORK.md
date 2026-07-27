@@ -114,6 +114,46 @@ reads them at run time (override location with `CONTENT_DOCTRINE_DIR`).
 Verify: Content tab → Weekly engine card shows "Scheduled 0 8 * * 1
 (Europe/London)" → hit **Run now** and watch the step log fill in live.
 
+## Project registry (Boop's awareness of your own projects)
+
+A first-class `projects` table (`convex/projectsSchema.ts`) gives Boop durable,
+up-to-date context on the software you're building — name + aliases, summary,
+offerings, dev-cycle stage, live status, and recently shipped work. When you
+name a project in iMessage ("how's Sigil?"), a compact roster is already in the
+dispatcher prompt so it recognizes it, and `get_project` pulls full detail. Edit
+it from the **Projects** dashboard tab, or just tell Boop ("Sigil's in beta now,
+live at …") — the `update_project` tool writes it through.
+
+Freshness is **hybrid**. A Mac-side job derives the sync-owned fields from each
+repo; anything you set by hand is pinned in `fieldSources` and the sync never
+overwrites it (`server/projects/sync.ts`). Register a project's `repoPath` (its
+local path on the Mac) in the Projects tab to enable this.
+
+Deploying it:
+
+```bash
+# From the Mac — the Convex schema changed (new `projects` table). trolley is a
+# pure client of the dev deployment, so push functions to it (NOT `convex
+# deploy` — there's no prod deploy key) and re-copy the generated types the
+# server reads (convex/_generated is gitignored, so git pull won't carry it):
+npx convex dev --once
+scp -r ~/www/boop-agent/convex/_generated oluseyi@trolley.oluseyi.dev:apps/boop-agent/convex/
+
+# On trolley — pick up the server tools + dashboard tab:
+cd ~/apps/boop-agent && git pull && npm ci && npm run build:debug && sudo systemctl restart boop-server
+```
+
+The repo-sync runs where the repos live — **the Mac**, not trolley:
+
+```bash
+npm run projects:sync         # run once, then keep running on PROJECT_SYNC_CRON (default every 6h)
+npm run projects:sync:once    # one-shot (for a launchd/cron entry)
+```
+
+The dashboard's "Sync now" button hits `/projects/sync` on whichever host serves
+it; on trolley (no repos) it returns cleanly with everything skipped, so the
+real freshness comes from the Mac-side runner above.
+
 ## Migration state and the bridge (historical — superseded by phase 2)
 
 Phase 1 replaces the old desk's **dashboard** (the old serve.js on :4611

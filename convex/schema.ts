@@ -1,9 +1,11 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { contentTables } from "./contentSchema";
+import { projectTables } from "./projectsSchema";
 
 export default defineSchema({
   ...contentTables,
+  ...projectTables,
   messages: defineTable({
     conversationId: v.string(),
     role: v.union(v.literal("user"), v.literal("assistant"), v.literal("system")),

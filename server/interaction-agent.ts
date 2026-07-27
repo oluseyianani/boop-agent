@@ -7,6 +7,7 @@ import { spawnExecutionAgent } from "./execution-agent.js";
 import { listEnabledIntegrations } from "./integrations/registry.js";
 import { createAutomationTools } from "./automation-tools.js";
 import { createContentTools } from "./content/tools.js";
+import { createProjectTools } from "./projects/tools.js";
 import { createDraftDecisionTools } from "./draft-tools.js";
 import { createSelfTools } from "./self-tools.js";
 import {
@@ -40,6 +41,7 @@ Your only tools:
 - recall / write_memory (durable memory for this user)
 - spawn_agent (dispatches a sub-agent that CAN touch the world)
 - create_automation / list_automations / toggle_automation / delete_automation
+- list_projects / get_project / update_project (the user's software projects)
 - list_drafts / send_draft / reject_draft
 - get_config / set_runtime / set_model / set_codex_reasoning_effort / set_timezone / list_integrations / search_composio_catalog / inspect_toolkit (self-inspection)
 
@@ -222,6 +224,16 @@ before saving.
 
 Available integrations for spawn_agent: {{INTEGRATIONS}}
 
+Projects you already know (the user's own software work):
+{{PROJECTS}}
+When the user names one of these (or an alias), you ALREADY know it exists —
+never act surprised or ask "what is X". Call get_project for full detail
+(offerings, dev-cycle stage, live status, recently shipped work) before you
+answer or spawn about it; the roster above is just enough to recognize the
+name. If the user names a project NOT in this list, you don't know it yet —
+ask a short clarifying question, and use update_project to record durable
+facts they tell you ("it's in beta now", "live at …", "we shipped X").
+
 Images:
 When the user texts a photo or screenshot, you'll see it directly as
 input — treat it as part of the message. Describe it, answer questions
@@ -351,10 +363,31 @@ export async function handleUserMessage(opts: HandleOpts): Promise<string> {
     .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
     .join("\n");
 
+  // Compact project roster so Boop recognizes a project name without a tool
+  // call; full detail still comes from get_project on demand.
+  const roster = (await convex.query(api.projects.roster, {})) as {
+    name: string;
+    aliases: string[];
+    summary: string;
+    stage: string;
+    live: boolean;
+  }[];
+  const projectsBlock = roster.length
+    ? roster
+        .map((p) => {
+          const extra = p.aliases.filter(
+            (a) => a.toLowerCase() !== p.name.toLowerCase(),
+          );
+          const aka = extra.length ? ` (aka ${extra.join(", ")})` : "";
+          return `- ${p.name}${aka} — ${p.summary || "no summary yet"} [${p.stage}${p.live ? " · live" : ""}]`;
+        })
+        .join("\n")
+    : "(none registered yet)";
+
   const systemPrompt = INTERACTION_SYSTEM.replace(
     "{{INTEGRATIONS}}",
     integrations.join(", ") || "(no integrations configured yet)",
-  );
+  ).replace("{{PROJECTS}}", projectsBlock);
 
   const userText = opts.mediaError
     ? `[user sent images but they couldn't be downloaded: ${opts.mediaError}]\n${opts.content}`
@@ -453,6 +486,7 @@ export async function handleUserMessage(opts: HandleOpts): Promise<string> {
     ...createMemoryTools(opts.conversationId),
     ...createAutomationTools(opts.conversationId),
     ...createContentTools(),
+    ...createProjectTools(),
     ...createDraftDecisionTools(opts.conversationId, runtimeConfig),
     ...createSelfTools(),
     defineRuntimeTool(
@@ -545,6 +579,9 @@ export async function handleUserMessage(opts: HandleOpts): Promise<string> {
               "mcp__boop-content__get_content_idea",
               "mcp__boop-content__get_content_slots",
               "mcp__boop-content__mark_content_posted",
+              "mcp__boop-projects__list_projects",
+              "mcp__boop-projects__get_project",
+              "mcp__boop-projects__update_project",
               "mcp__boop-draft-decisions__list_drafts",
               "mcp__boop-draft-decisions__send_draft",
               "mcp__boop-draft-decisions__reject_draft",

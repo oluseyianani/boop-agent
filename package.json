@@ -29,6 +29,8 @@
     "codex:protocol": "codex app-server generate-ts --out server/runtimes/codex-app-server-protocol --experimental",
     "start": "npm run preflight && tsx server/index.ts",
     "deploy:convex": "convex deploy",
+    "projects:sync": "tsx scripts/project-sync.ts",
+    "projects:sync:once": "tsx scripts/project-sync.ts --once",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest"
