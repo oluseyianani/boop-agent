@@ -278,6 +278,21 @@ button.toggle-switch {
   will-change: transform, opacity;
 }
 
+/* ── Centered modal ── */
+@keyframes modal-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modal-card-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.modal-backdrop { animation: modal-backdrop-in 0.16s var(--ease-out-cubic); }
+.modal-card {
+  animation: modal-card-in 0.2s var(--ease-out-quart);
+  will-change: transform, opacity;
+}
+
 /* ── Slide in ── */
 @keyframes slide-down {
   from { opacity: 0; transform: translateY(-8px); }
@@ -347,6 +362,8 @@ button.toggle-switch {
   .view-shell,
   .pop-in,
   .changelog-drawer,
+  .modal-backdrop,
+  .modal-card,
   .braille-grid span,
   .shimmer {
     animation: none;

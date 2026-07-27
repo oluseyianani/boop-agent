@@ -1,12 +1,18 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api.js";
 import { composePrompt } from "../lib/contentPrompts.js";
 import { bodyTextClass, mutedTextClass, subtlePanelClass } from "./PanelPrimitives.js";
 
-// Slide-over detail for one idea: failure moment, hooks, the faceless
+// Centered-modal detail for one idea: failure moment, hooks, the faceless
 // script, UGC brief, composed generation prompts, assets, and competitor
 // evidence. Opened from idea rows and calendar slots in ContentPanel.
+//
+// Rendered through a portal to document.body so it escapes the transformed
+// `.view-shell` ancestor — a position:fixed descendant of an element with a
+// transform/will-change resolves against that ancestor, not the viewport,
+// which previously pinned the panel to the top-left of the content area.
 
 interface IdeaData {
   id: string;
@@ -102,13 +108,21 @@ export function ContentDetailDrawer({
       .slice(0, 2);
   }, [idea, competitorPosts]);
 
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   if (!idea) return null;
 
-  return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
-      <aside
-        className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-[560px] flex-col overflow-hidden border-l shadow-2xl ${
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+      <div className="modal-backdrop absolute inset-0 bg-black/50" onClick={onClose} />
+      <div
+        className={`modal-card relative z-10 flex max-h-[85vh] w-full max-w-[640px] flex-col overflow-hidden rounded-2xl border shadow-2xl ${
           isDark ? "border-white/10 bg-[#18181b] text-zinc-100" : "border-zinc-200 bg-white text-zinc-900"
         }`}
         role="dialog"
@@ -282,8 +296,9 @@ export function ContentDetailDrawer({
             </Section>
           )}
         </div>
-      </aside>
-    </>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
