@@ -84,6 +84,150 @@ export const upsertIdea = mutation({
   },
 });
 
+// Patch only the creative pack of an idea (the UGC briefs live here as a JSON
+// blob). Used by the brief composer — keeps the rest of the idea untouched.
+export const setIdeaCreative = mutation({
+  args: { projectId: v.string(), ideaId: v.string(), creative: v.string() },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("contentIdeas")
+      .withIndex("by_project_idea", (q) =>
+        q.eq("projectId", args.projectId).eq("ideaId", args.ideaId),
+      )
+      .unique();
+    if (!existing) return null;
+    await ctx.db.patch(existing._id, { creative: args.creative, updatedAt: Date.now() });
+    return existing._id;
+  },
+});
+
+// ------------------------------------------------------- reference clips
+
+// A short-lived signed URL the browser POSTs the recording to. The client
+// then calls registerClip with the returned storageId.
+export const generateClipUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const registerClip = mutation({
+  args: {
+    projectId: v.string(),
+    clipId: v.string(),
+    label: v.string(),
+    tag: v.string(),
+    storageId: v.id("_storage"),
+    durationSec: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("contentClips")
+      .withIndex("by_project_clip", (q) =>
+        q.eq("projectId", args.projectId).eq("clipId", args.clipId),
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, { label: args.label, tag: args.tag });
+      return existing._id;
+    }
+    return await ctx.db.insert("contentClips", { ...args, addedAt: Date.now() });
+  },
+});
+
+// Clips for a project, newest first, each with a resolved signed playback URL.
+export const listClips = query({
+  args: { projectId: v.string() },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("contentClips")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .order("desc")
+      .take(200);
+    return await Promise.all(
+      rows.map(async (r) => ({
+        clipId: r.clipId,
+        label: r.label,
+        tag: r.tag,
+        durationSec: r.durationSec,
+        addedAt: r.addedAt,
+        url: await ctx.storage.getUrl(r.storageId),
+      })),
+    );
+  },
+});
+
+export const deleteClip = mutation({
+  args: { projectId: v.string(), clipId: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("contentClips")
+      .withIndex("by_project_clip", (q) =>
+        q.eq("projectId", args.projectId).eq("clipId", args.clipId),
+      )
+      .unique();
+    if (!row) return null;
+    await ctx.storage.delete(row.storageId);
+    await ctx.db.delete(row._id);
+    return row._id;
+  },
+});
+
+// -------------------------------------------------- viral references
+
+export const listViralReferences = query({
+  args: { projectId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("viralReferences")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .order("desc")
+      .take(100);
+  },
+});
+
+export const saveViralReference = mutation({
+  args: {
+    projectId: v.string(),
+    refId: v.string(),
+    platform: v.string(),
+    url: v.optional(v.string()),
+    caption: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    teardown: v.optional(v.string()),
+    status: v.union(v.literal("new"), v.literal("done")),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("viralReferences")
+      .withIndex("by_project_ref", (q) =>
+        q.eq("projectId", args.projectId).eq("refId", args.refId),
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, args);
+      return existing._id;
+    }
+    return await ctx.db.insert("viralReferences", { ...args, createdAt: Date.now() });
+  },
+});
+
+export const deleteViralReference = mutation({
+  args: { projectId: v.string(), refId: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("viralReferences")
+      .withIndex("by_project_ref", (q) =>
+        q.eq("projectId", args.projectId).eq("refId", args.refId),
+      )
+      .unique();
+    if (!row) return null;
+    await ctx.db.delete(row._id);
+    return row._id;
+  },
+});
+
 // ----------------------------------------------------------------- scripts
 
 export const listScripts = query({
@@ -135,17 +279,6 @@ export const listSlots = query({
   },
 });
 
-export const recentSlots = query({
-  args: { projectId: v.string(), limit: v.optional(v.number()) },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("contentSlots")
-      .withIndex("by_project_date", (q) => q.eq("projectId", args.projectId))
-      .order("desc")
-      .take(args.limit ?? 100);
-  },
-});
-
 // Upsert a planner/imported slot. A slot already marked posted is immutable
 // history and is never overwritten (same rule as the old SQLite store).
 export const upsertSlot = mutation({
@@ -177,29 +310,82 @@ export const upsertSlot = mutation({
   },
 });
 
-// Mark one slot posted on one platform: stamps the slot AND writes the
-// content log row (which drives the planner's cooldown). Idempotent — a
-// slot that is already posted is returned unchanged.
-export const markSlotPosted = mutation({
-  args: { slotKey: v.string(), platform: v.string() },
+// Parse the platform-native id from a posted URL so a future stats pull can
+// address it. Best-effort — returns undefined for shortlinks we can't resolve.
+function parseExternalId(url: string): string | undefined {
+  try {
+    const u = new URL(url.trim());
+    const path = u.pathname;
+    let m: RegExpMatchArray | null;
+    if ((m = path.match(/\/video\/(\d+)/))) return m[1]; // tiktok
+    if ((m = path.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/))) return m[1]; // instagram/fb
+    if ((m = path.match(/\/shorts\/([A-Za-z0-9_-]+)/))) return m[1]; // youtube shorts
+    if (u.hostname.includes("youtu.be") && path.length > 1) return path.slice(1);
+    const vid = u.searchParams.get("v");
+    if (vid) return vid; // youtube watch
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// Mark ANY idea posted, capturing a link per platform (the modal in the desk).
+// Writes one contentLog row per platform (dedup on idea+platform+url) and, if a
+// slotKey is given, stamps that calendar slot too. Drives idea cooldowns.
+export const markIdeaPosted = mutation({
+  args: {
+    projectId: v.string(),
+    ideaId: v.string(),
+    format: v.optional(v.string()),
+    briefId: v.optional(v.string()),
+    slotKey: v.optional(v.string()),
+    posts: v.array(
+      v.object({
+        platform: v.string(),
+        url: v.string(),
+        postedAt: v.optional(v.number()),
+      }),
+    ),
+  },
   handler: async (ctx, args) => {
-    const slot = await ctx.db
-      .query("contentSlots")
-      .withIndex("by_slot_key", (q) => q.eq("slotKey", args.slotKey))
-      .unique();
-    if (!slot) return null;
-    if (slot.postedAt) return slot._id;
     const now = Date.now();
-    await ctx.db.patch(slot._id, { postedAt: now, postedVia: args.platform });
-    await ctx.db.insert("contentLog", {
-      projectId: slot.projectId,
-      ideaId: slot.ideaId,
-      format: slot.format,
-      platform: args.platform,
-      source: "manual",
-      postedAt: now,
-    });
-    return slot._id;
+    const existing = await ctx.db
+      .query("contentLog")
+      .withIndex("by_project_idea", (q) =>
+        q.eq("projectId", args.projectId).eq("ideaId", args.ideaId),
+      )
+      .take(SCAN_LIMIT);
+    let written = 0;
+    for (const post of args.posts) {
+      const url = post.url.trim();
+      // Dedup only when we have a link (the text path may mark without one).
+      if (url && existing.some((r) => r.platform === post.platform && r.url === url)) continue;
+      await ctx.db.insert("contentLog", {
+        projectId: args.projectId,
+        ideaId: args.ideaId,
+        briefId: args.briefId,
+        format: args.format,
+        platform: post.platform,
+        url: url || undefined,
+        externalId: url ? parseExternalId(url) : undefined,
+        source: "manual",
+        postedAt: post.postedAt ?? now,
+      });
+      written++;
+    }
+    if (args.slotKey) {
+      const slot = await ctx.db
+        .query("contentSlots")
+        .withIndex("by_slot_key", (q) => q.eq("slotKey", args.slotKey!))
+        .unique();
+      if (slot && !slot.postedAt) {
+        await ctx.db.patch(slot._id, {
+          postedAt: args.posts[0]?.postedAt ?? now,
+          postedVia: args.posts.map((p) => p.platform).join(", ") || undefined,
+        });
+      }
+    }
+    return { written };
   },
 });
 
@@ -264,359 +450,8 @@ export const recentLog = query({
   },
 });
 
-// ----------------------------------------------------- pull data (phase 2)
-
-export const upsertPost = mutation({
-  args: {
-    projectId: v.string(),
-    shortcode: v.string(),
-    ownerHandle: v.string(),
-    url: v.optional(v.string()),
-    type: v.optional(v.string()),
-    caption: v.optional(v.string()),
-    hashtags: v.optional(v.string()),
-    likes: v.number(),
-    comments: v.number(),
-    views: v.optional(v.number()),
-    score: v.number(),
-    postedAt: v.optional(v.number()),
-    displayUrl: v.optional(v.string()),
-    fetchedAt: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("contentPosts")
-      .withIndex("by_project_shortcode", (q) =>
-        q.eq("projectId", args.projectId).eq("shortcode", args.shortcode),
-      )
-      .unique();
-    if (existing) {
-      await ctx.db.patch(existing._id, args);
-      return existing._id;
-    }
-    return await ctx.db.insert("contentPosts", args);
-  },
-});
-
-export const upsertProfile = mutation({
-  args: {
-    projectId: v.string(),
-    handle: v.string(),
-    username: v.optional(v.string()),
-    fullName: v.optional(v.string()),
-    followers: v.optional(v.number()),
-    following: v.optional(v.number()),
-    postsCount: v.optional(v.number()),
-    biography: v.optional(v.string()),
-    profilePicUrl: v.optional(v.string()),
-    source: v.optional(v.string()),
-    fetchedAt: v.number(),
-  },
-  handler: async (ctx, args) => {
-    await ctx.db.insert("contentProfileSnapshots", {
-      projectId: args.projectId,
-      handle: args.handle,
-      followers: args.followers,
-      following: args.following,
-      postsCount: args.postsCount,
-      fetchedAt: args.fetchedAt,
-    });
-    const existing = await ctx.db
-      .query("contentProfiles")
-      .withIndex("by_project_handle", (q) =>
-        q.eq("projectId", args.projectId).eq("handle", args.handle),
-      )
-      .unique();
-    if (existing) {
-      // Keep the old profile pic when a fallback pull has none.
-      await ctx.db.patch(existing._id, {
-        ...args,
-        profilePicUrl: args.profilePicUrl ?? existing.profilePicUrl,
-      });
-      return existing._id;
-    }
-    return await ctx.db.insert("contentProfiles", args);
-  },
-});
-
-export const logPull = mutation({
-  args: {
-    projectId: v.string(),
-    kind: v.union(v.literal("profile"), v.literal("posts")),
-    handle: v.string(),
-    status: v.union(v.literal("ok"), v.literal("fallback"), v.literal("blocked")),
-    items: v.number(),
-    fetchedAt: v.number(),
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db.insert("contentPulls", args);
-  },
-});
-
-// Freshness for one handle+kind: last success and last attempt of any status.
-// A 'fallback' counts as success for profiles but not for posts — same rule
-// as the old desk.
-export const pullFreshness = query({
-  args: {
-    projectId: v.string(),
-    kind: v.union(v.literal("profile"), v.literal("posts")),
-    handle: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const rows = await ctx.db
-      .query("contentPulls")
-      .withIndex("by_project_kind_handle", (q) =>
-        q.eq("projectId", args.projectId).eq("kind", args.kind).eq("handle", args.handle),
-      )
-      .take(SCAN_LIMIT);
-    const okStatuses = args.kind === "profile" ? ["ok", "fallback"] : ["ok"];
-    let lastSuccess: number | null = null;
-    let lastAttempt: number | null = null;
-    for (const r of rows) {
-      if (lastAttempt === null || r.fetchedAt > lastAttempt) lastAttempt = r.fetchedAt;
-      if (okStatuses.includes(r.status) && (lastSuccess === null || r.fetchedAt > lastSuccess)) {
-        lastSuccess = r.fetchedAt;
-      }
-    }
-    return { lastSuccess, lastAttempt };
-  },
-});
-
-export const listPosts = query({
-  args: { projectId: v.string(), ownerHandle: v.string() },
-  handler: async (ctx, args) => {
-    const rows = await ctx.db
-      .query("contentPosts")
-      .withIndex("by_project_owner", (q) =>
-        q.eq("projectId", args.projectId).eq("ownerHandle", args.ownerHandle),
-      )
-      .take(SCAN_LIMIT);
-    return rows.sort((a, b) => b.score - a.score);
-  },
-});
-
-export const listProfiles = query({
-  args: { projectId: v.string() },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("contentProfiles")
-      .withIndex("by_project_handle", (q) => q.eq("projectId", args.projectId))
-      .take(50);
-  },
-});
-
-export const getProfile = query({
-  args: { projectId: v.string(), handle: v.string() },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("contentProfiles")
-      .withIndex("by_project_handle", (q) =>
-        q.eq("projectId", args.projectId).eq("handle", args.handle),
-      )
-      .unique();
-  },
-});
-
-// All stored posts for a set of handles (competitor evidence for the idea
-// detail view), best-scoring first.
-export const postsForHandles = query({
-  args: { projectId: v.string(), handles: v.array(v.string()) },
-  handler: async (ctx, args) => {
-    const out = [];
-    for (const h of args.handles) {
-      const rows = await ctx.db
-        .query("contentPosts")
-        .withIndex("by_project_owner", (q) =>
-          q.eq("projectId", args.projectId).eq("ownerHandle", h.toLowerCase()),
-        )
-        .take(200);
-      out.push(...rows);
-    }
-    return out.sort((a, b) => b.score - a.score);
-  },
-});
-
-export const followerHistory = query({
-  args: { projectId: v.string(), handle: v.string() },
-  handler: async (ctx, args) => {
-    const rows = await ctx.db
-      .query("contentProfileSnapshots")
-      .withIndex("by_project_handle", (q) =>
-        q.eq("projectId", args.projectId).eq("handle", args.handle),
-      )
-      .take(SCAN_LIMIT);
-    return rows
-      .sort((a, b) => a.fetchedAt - b.fetchedAt)
-      .map((r) => ({ followers: r.followers ?? null, at: r.fetchedAt }));
-  },
-});
-
-export const logShortcodes = query({
-  args: { projectId: v.string() },
-  handler: async (ctx, args) => {
-    const rows = await ctx.db
-      .query("contentLog")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .take(SCAN_LIMIT);
-    return rows.map((r) => r.shortcode).filter((s): s is string => Boolean(s));
-  },
-});
-
-// Auto-detected Instagram publish → stamp the oldest unposted slot for the
-// idea, preferring a slot with the matching format (old stampOldestSlot).
-export const stampOldestSlot = mutation({
-  args: {
-    projectId: v.string(),
-    ideaId: v.string(),
-    format: v.optional(v.string()),
-    postedAt: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const rows = await ctx.db
-      .query("contentSlots")
-      .withIndex("by_project_date", (q) => q.eq("projectId", args.projectId))
-      .take(SCAN_LIMIT);
-    const candidates = rows
-      .filter((s) => s.ideaId === args.ideaId && !s.postedAt)
-      .sort(
-        (a, b) =>
-          Number(b.format === args.format) - Number(a.format === args.format) ||
-          a.slotDate.localeCompare(b.slotDate),
-      );
-    const target = candidates[0];
-    if (!target) return null;
-    await ctx.db.patch(target._id, { postedAt: args.postedAt, postedVia: "instagram-auto" });
-    return target._id;
-  },
-});
-
-// ------------------------------------------------- bank refresh (phase 2)
-
-// Apply a validated bank in one atomic mutation: upsert every idea and
-// script, update project bank metadata. Ideas absent from the new bank are
-// left untouched (the doctrine retires ideas, never deletes them).
-export const applyBank = mutation({
-  args: {
-    projectId: v.string(),
-    ideas: v.array(
-      v.object({
-        ideaId: v.string(),
-        title: v.string(),
-        enemy: v.string(),
-        retired: v.boolean(),
-        data: v.string(),
-        creative: v.optional(v.string()),
-      }),
-    ),
-    scripts: v.array(v.object({ ideaId: v.string(), data: v.string() })),
-    dmPlaybook: v.optional(v.string()),
-    bankVersion: v.number(),
-    bankRefreshedAt: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const now = Date.now();
-    for (const idea of args.ideas) {
-      const existing = await ctx.db
-        .query("contentIdeas")
-        .withIndex("by_project_idea", (q) =>
-          q.eq("projectId", args.projectId).eq("ideaId", idea.ideaId),
-        )
-        .unique();
-      if (existing) await ctx.db.patch(existing._id, { ...idea, updatedAt: now });
-      else {
-        await ctx.db.insert("contentIdeas", {
-          ...idea,
-          projectId: args.projectId,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-    }
-    for (const script of args.scripts) {
-      const existing = await ctx.db
-        .query("contentScripts")
-        .withIndex("by_project_idea", (q) =>
-          q.eq("projectId", args.projectId).eq("ideaId", script.ideaId),
-        )
-        .unique();
-      if (existing) await ctx.db.patch(existing._id, { data: script.data, updatedAt: now });
-      else {
-        await ctx.db.insert("contentScripts", {
-          ...script,
-          projectId: args.projectId,
-          updatedAt: now,
-        });
-      }
-    }
-    const project = await ctx.db
-      .query("contentProjects")
-      .withIndex("by_project_id", (q) => q.eq("projectId", args.projectId))
-      .unique();
-    if (project) {
-      await ctx.db.patch(project._id, {
-        dmPlaybook: args.dmPlaybook ?? project.dmPlaybook,
-        bankVersion: args.bankVersion,
-        bankRefreshedAt: args.bankRefreshedAt,
-        updatedAt: now,
-      });
-    }
-    return { ideas: args.ideas.length, scripts: args.scripts.length };
-  },
-});
-
-// -------------------------------------------------- engine runs (phase 2)
-
-export const createContentRun = mutation({
-  args: {
-    runId: v.string(),
-    projectId: v.string(),
-    trigger: v.union(v.literal("schedule"), v.literal("manual")),
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db.insert("contentRuns", {
-      ...args,
-      status: "running",
-      startedAt: Date.now(),
-    });
-  },
-});
-
-export const updateContentRun = mutation({
-  args: {
-    runId: v.string(),
-    status: v.union(v.literal("running"), v.literal("completed"), v.literal("failed")),
-    steps: v.optional(v.string()),
-    error: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const run = await ctx.db
-      .query("contentRuns")
-      .withIndex("by_run_id", (q) => q.eq("runId", args.runId))
-      .unique();
-    if (!run) return null;
-    const { runId: _runId, ...patch } = args;
-    await ctx.db.patch(run._id, {
-      ...patch,
-      ...(args.status !== "running" ? { completedAt: Date.now() } : {}),
-    });
-    return run._id;
-  },
-});
-
-export const recentContentRuns = query({
-  args: { projectId: v.string(), limit: v.optional(v.number()) },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("contentRuns")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .order("desc")
-      .take(args.limit ?? 10);
-  },
-});
-
-// Per-idea usage summary: times used, last posted, per-format lasts.
-// Same shape as the old getContentUsage() so the planner port (phase 2)
-// can consume it unchanged.
+// Per-idea usage summary: times used, last posted, per-format lasts. Drives
+// the idea-bank cooldown state in the desk and the dispatcher tools.
 export const ideaUsage = query({
   args: { projectId: v.string() },
   handler: async (ctx, args) => {

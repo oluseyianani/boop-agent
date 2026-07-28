@@ -42,6 +42,41 @@ export const contentTables = {
     .index("by_project", ["projectId"])
     .index("by_project_idea", ["projectId", "ideaId"]),
 
+  // Reference clip library: screen recordings of the app (full walkthrough +
+  // per-tab standalones) uploaded to Convex file storage. A UGC brief anchors
+  // to one or more of these as its Seedance starting footage ([Video1]…).
+  // `tag` groups them (full-walkthrough | list | receipt-scan | …) so any idea
+  // can pull the right clip.
+  contentClips: defineTable({
+    projectId: v.string(),
+    clipId: v.string(),
+    label: v.string(),
+    tag: v.string(),
+    storageId: v.id("_storage"),
+    durationSec: v.optional(v.number()),
+    addedAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_project_clip", ["projectId", "clipId"]),
+
+  // Viral reference: a niche video the user feeds in for teardown. It informs
+  // the creative template (hook, structure, VO style) and is NEVER sent to
+  // Seedance — the analysis drafts a UGC brief that anchors to an app clip.
+  // `teardown` is the JSON analysis; a drafted brief links back via refId.
+  viralReferences: defineTable({
+    projectId: v.string(),
+    refId: v.string(),
+    platform: v.string(), // tiktok | instagram | youtube | other
+    url: v.optional(v.string()),
+    caption: v.optional(v.string()),
+    notes: v.optional(v.string()), // the user's beat-by-beat "what happens"
+    teardown: v.optional(v.string()), // JSON analysis result
+    status: v.union(v.literal("new"), v.literal("done")),
+    createdAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_project_ref", ["projectId", "refId"]),
+
   // Hook & Script output per idea: { hooks, beats, cta, ugcBrief } as JSON.
   contentScripts: defineTable({
     projectId: v.string(),
@@ -71,20 +106,48 @@ export const contentTables = {
     .index("by_slot_key", ["slotKey"])
     .index("by_project_date", ["projectId", "slotDate"]),
 
-  // Every published execution. Drives the planner's least-recently-used
-  // rotation and idea cooldowns. `shortcode` links Instagram auto-matches.
+  // Every published execution — one row per (idea, platform). Drives idea
+  // cooldowns. `url` is the live link to the posted video and `externalId` the
+  // platform id parsed from it, so a future stats pull can walk these rows.
   contentLog: defineTable({
     projectId: v.string(),
     ideaId: v.string(),
+    briefId: v.optional(v.string()), // which ugcBrief produced it
     format: v.optional(v.string()),
     platform: v.string(), // instagram | tiktok | facebook | youtube-shorts | all
-    shortcode: v.optional(v.string()),
+    url: v.optional(v.string()), // link to the posted video
+    externalId: v.optional(v.string()), // id/shortcode parsed from url
+    shortcode: v.optional(v.string()), // legacy Instagram auto-match key
     source: v.union(v.literal("auto"), v.literal("manual"), v.literal("import")),
     postedAt: v.number(),
   })
     .index("by_project", ["projectId"])
     .index("by_project_idea", ["projectId", "ideaId"])
     .index("by_shortcode", ["shortcode"]),
+
+  // Time-series performance snapshots per posted link. Populated by a future
+  // on-demand "refresh stats" action (not built yet) that walks contentLog
+  // rows carrying a url. Kept as a separate table so high-churn metric writes
+  // never contend with the immutable log rows.
+  contentMetrics: defineTable({
+    projectId: v.string(),
+    logId: v.id("contentLog"),
+    platform: v.string(),
+    url: v.string(),
+    views: v.optional(v.number()),
+    likes: v.optional(v.number()),
+    comments: v.optional(v.number()),
+    shares: v.optional(v.number()),
+    fetchedAt: v.number(),
+  })
+    .index("by_log", ["logId"])
+    .index("by_project", ["projectId"]),
+
+  // DEPRECATED (UGC rewrite, phase 3): the Apify scraper + weekly engine were
+  // removed, so the five tables below (contentPosts, contentProfiles,
+  // contentProfileSnapshots, contentPulls, contentRuns) no longer have any
+  // reader or writer. Definitions are kept only so existing rows stay schema-
+  // valid; drop them in a dedicated cleanup once the data is cleared.
 
   // Scraped Instagram posts (own + competitors). Score = views for video,
   // likes+comments otherwise — same ranking the old desk used.

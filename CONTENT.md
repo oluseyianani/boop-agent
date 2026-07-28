@@ -1,11 +1,33 @@
 # Content desk (fork-local feature)
 
+> **UGC rewrite (2026-07-28) — this doc partly describes a removed system.**
+> The desk pivoted from faceless, brand-locked generation prompts to **UGC
+> video briefs for Seedance 2.0**. What changed:
+> - The creative unit is now a structured **UGC brief** (reference clip +
+>   scene + actor blocking + camera + voiceover + mood) rendered to a short
+>   Seedance prompt — see `debug/src/lib/contentPrompts.ts` and the composer
+>   in the idea detail drawer. The old faceless `genPrompts` are retired.
+> - A **reference clip library** (`contentClips`, Convex file storage) holds
+>   app screen recordings that anchor a brief as `[Video1]`.
+> - The **weekly engine and all social scraping are removed** — no croner
+>   schedule, no `CONTENT_ENGINE`, no Apify pull, no LLM bank refresh, no
+>   planner/summary/Telegram digest, no `/content` HTTP routes. Generation is
+>   on-demand from the dashboard; you supply viral reference videos yourself.
+> - **Mark-posted** now captures a link per platform (`contentLog.url` +
+>   `contentMetrics` seam for a future stats pull).
+> - **Viral teardown** (`server/content/teardown.ts`, `POST /content/teardown`):
+>   feed a niche video (upload → client-side frame extraction → multimodal
+>   analysis, or URL/caption/notes text-only) → it analyses why it works and
+>   drafts a UGC brief in the Seedance style, saved to `viralReferences`.
+> The "Phase 2/3" checklist below documents the old engine for history; the
+> scraped tables (`contentPosts`/`contentProfiles`/`contentPulls`/etc.) are
+> deprecated and write-dead.
+
 This fork embeds the Twizle content operation (previously the standalone
-`content-agent` repo) inside Boop. The desk's concepts — a doctrine-gated
-idea bank where every idea names its enemy, faceless scripts with UGC
-briefs, a planner calendar with idea cooldowns, and a content log of every
-published execution — live in Convex tables and a **Content** tab in the
-debug dashboard.
+`content-agent` repo) inside Boop. The desk's concepts — an idea bank where
+every idea names its enemy, scripts with UGC briefs, a calendar with idea
+cooldowns, and a content log of every published execution — live in Convex
+tables and a **Content** tab in the debug dashboard.
 
 ## Status: phase 1 (read + mark-posted)
 

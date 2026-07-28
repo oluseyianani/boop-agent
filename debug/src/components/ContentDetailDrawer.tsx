@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api.js";
-import { composePrompt } from "../lib/contentPrompts.js";
+import { UgcBriefComposer } from "./UgcBriefComposer.js";
+import { MarkPostedModal } from "./MarkPostedModal.js";
+import type { CreativePack } from "../lib/contentPrompts.js";
 import { bodyTextClass, mutedTextClass, subtlePanelClass } from "./PanelPrimitives.js";
 
-// Centered-modal detail for one idea: failure moment, hooks, the faceless
-// script, UGC brief, composed generation prompts, assets, and competitor
-// evidence. Opened from idea rows and calendar slots in ContentPanel.
+// Centered-modal detail for one idea: failure moment, hooks, the script, the
+// legacy UGC brief text, the UGC brief composer (Seedance prompts), and assets.
+// A "Mark posted" action captures per-platform links. Opened from idea rows and
+// calendar slots in ContentPanel.
 //
 // Rendered through a portal to document.body so it escapes the transformed
 // `.view-shell` ancestor — a position:fixed descendant of an element with a
@@ -32,17 +35,10 @@ interface ScriptData {
   ugcBrief?: string;
 }
 
-interface CreativePack {
-  genPrompts?: { label?: string; prompt?: string }[];
-  assets?: string[];
-}
-
-interface PostRow {
-  ownerHandle: string;
-  shortcode: string;
-  url?: string;
-  caption?: string;
-  score: number;
+interface ClipRow {
+  clipId: string;
+  label: string;
+  tag: string;
 }
 
 export function ContentDetailDrawer({
@@ -65,17 +61,12 @@ export function ContentDetailDrawer({
   const scripts = useQuery(api.content.listScripts, { projectId }) as
     | { ideaId: string; data: string }[]
     | undefined;
-  const competitors = useMemo(
-    () =>
-      ((projectConfig.competitors as { handle: string }[] | undefined) ?? []).map(
-        (c) => c.handle,
-      ),
-    [projectConfig],
-  );
-  const competitorPosts = useQuery(api.content.postsForHandles, {
-    projectId,
-    handles: competitors,
-  }) as PostRow[] | undefined;
+  const clips = (useQuery(api.content.listClips, { projectId }) as ClipRow[] | undefined) ?? [];
+  const platforms = ((projectConfig.platforms as string[] | undefined) ?? [
+    "instagram",
+    "tiktok",
+  ]);
+  const [marking, setMarking] = useState(false);
 
   const idea: IdeaData | null = useMemo(() => {
     try {
@@ -99,14 +90,6 @@ export function ContentDetailDrawer({
       return null;
     }
   }, [scripts, ideaId]);
-
-  const evidence = useMemo(() => {
-    if (!idea?.keywords?.length || !competitorPosts) return [];
-    const kw = idea.keywords.map((k) => k.toLowerCase());
-    return competitorPosts
-      .filter((p) => kw.some((k) => (p.caption ?? "").toLowerCase().includes(k)))
-      .slice(0, 2);
-  }, [idea, competitorPosts]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -141,15 +124,27 @@ export function ContentDetailDrawer({
             <h3 className="mt-0.5 text-base font-semibold leading-snug">{idea.title}</h3>
             <div className={`mono mt-0.5 text-[10px] ${mutedTextClass(isDark)}`}>{ideaId}</div>
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className={`shrink-0 rounded-lg px-2 py-1 text-sm ${
-              isDark ? "text-zinc-400 hover:bg-white/10" : "text-zinc-500 hover:bg-zinc-100"
-            }`}
-          >
-            ×
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              onClick={() => setMarking(true)}
+              className={`rounded-lg border px-2 py-1 text-[11px] font-medium ${
+                isDark
+                  ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300 hover:bg-emerald-400/20"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+              }`}
+            >
+              Mark posted
+            </button>
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              className={`rounded-lg px-2 py-1 text-sm ${
+                isDark ? "text-zinc-400 hover:bg-white/10" : "text-zinc-500 hover:bg-zinc-100"
+              }`}
+            >
+              ×
+            </button>
+          </div>
         </div>
 
         <div className="debug-scroll flex-1 space-y-4 overflow-y-auto px-5 py-4 text-sm">
@@ -196,7 +191,7 @@ export function ContentDetailDrawer({
                 </ol>
               </Section>
 
-              <Section title="Script (faceless)" isDark={isDark}>
+              <Section title="Script" isDark={isDark}>
                 <div className="space-y-1.5">
                   {(script.beats ?? []).map((b, i) => (
                     <div key={i} className="flex gap-2.5">
@@ -234,30 +229,22 @@ export function ContentDetailDrawer({
             </Section>
           )}
 
-          {(creative?.genPrompts ?? []).length > 0 && (
-            <Section title="Generation prompts (composed, copy-paste ready)" isDark={isDark}>
-              <div className="space-y-2">
-                {creative!.genPrompts!.map((g, i) => {
-                  const composed = composePrompt(projectConfig, idea, script, g);
-                  return (
-                    <div key={i} className={subtlePanelClass(isDark, "p-3")}>
-                      <div className="mb-1.5 flex items-center justify-between gap-2">
-                        <span className={`text-xs font-medium ${bodyTextClass(isDark)}`}>
-                          {g.label ?? `prompt ${i + 1}`}
-                        </span>
-                        <CopyButton text={composed} isDark={isDark} />
-                      </div>
-                      <pre
-                        className={`max-h-40 overflow-y-auto whitespace-pre-wrap text-[11px] leading-relaxed ${mutedTextClass(isDark)}`}
-                      >
-                        {composed}
-                      </pre>
-                    </div>
-                  );
-                })}
-              </div>
-            </Section>
-          )}
+          <UgcBriefComposer
+            isDark={isDark}
+            projectId={projectId}
+            ideaId={ideaId}
+            creative={creative}
+            clips={clips}
+            product={[projectConfig.productBlurb, projectConfig.positioning]
+              .filter((v): v is string => typeof v === "string" && v.length > 0)
+              .join(" — ")}
+            idea={{
+              title: idea.title,
+              enemy: idea.enemy,
+              failureMoment: idea.failureMoment,
+              angle: idea.angle,
+            }}
+          />
 
           {(creative?.assets ?? []).length > 0 && (
             <Section title="Assets to capture" isDark={isDark}>
@@ -269,34 +256,20 @@ export function ContentDetailDrawer({
             </Section>
           )}
 
-          {evidence.length > 0 && (
-            <Section title="Evidence (competitor posts on this theme)" isDark={isDark}>
-              <div className="space-y-1.5">
-                {evidence.map((p) => (
-                  <a
-                    key={p.shortcode}
-                    href={p.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={subtlePanelClass(
-                      isDark,
-                      "block px-3 py-2 hover:opacity-80",
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-2 text-xs">
-                      <span className="mono">@{p.ownerHandle}</span>
-                      <span className={mutedTextClass(isDark)}>score {p.score.toLocaleString("en-GB")}</span>
-                    </div>
-                    <div className={`mt-0.5 text-[11px] ${mutedTextClass(isDark)}`}>
-                      {[...String(p.caption ?? "")].slice(0, 110).join("")}…
-                    </div>
-                  </a>
-                ))}
-              </div>
-            </Section>
-          )}
         </div>
       </div>
+
+      {marking && (
+        <MarkPostedModal
+          isDark={isDark}
+          projectId={projectId}
+          ideaId={ideaId}
+          ideaTitle={idea.title}
+          platforms={platforms}
+          format={highlightFormat}
+          onClose={() => setMarking(false)}
+        />
+      )}
     </div>,
     document.body,
   );

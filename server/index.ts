@@ -32,7 +32,7 @@ import {
 } from "./runtime-config.js";
 import { startImageCleanup } from "./images/clean.js";
 import { isPublicServerRequest, isTrustedLocalRequest } from "./local-access.js";
-import { createContentRouter, startContentEngine } from "./content/index.js";
+import { analyzeTeardown, type TeardownRequest } from "./content/teardown.js";
 
 async function main() {
   await loadIntegrations();
@@ -41,7 +41,6 @@ async function main() {
   startHeartbeatLoop();
   startConsolidationLoop();
   startImageCleanup();
-  startContentEngine();
   // No-op when a paid embedding key is set; otherwise downloads/loads the
   // local BGE-large model in the background so the first user-facing
   // recall() doesn't pay the model-load cost.
@@ -78,7 +77,27 @@ async function main() {
     res.json({ ok: true, service: "boop-agent" });
   });
 
-  app.use("/content", createContentRouter());
+  // Viral video teardown → drafted UGC brief (content desk, phase 4).
+  app.post("/content/teardown", async (req, res) => {
+    try {
+      const body = (req.body ?? {}) as TeardownRequest;
+      const frames = Array.isArray(body.frameStorageIds)
+        ? body.frameStorageIds.filter((s): s is string => typeof s === "string").slice(0, 8)
+        : undefined;
+      const result = await analyzeTeardown({
+        product: typeof body.product === "string" ? body.product : undefined,
+        platform: typeof body.platform === "string" ? body.platform : undefined,
+        url: typeof body.url === "string" ? body.url : undefined,
+        caption: typeof body.caption === "string" ? body.caption : undefined,
+        notes: typeof body.notes === "string" ? body.notes : undefined,
+        frameStorageIds: frames,
+        idea: body.idea && typeof body.idea === "object" ? body.idea : undefined,
+      });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
 
   app.get("/runtime-config", async (_req, res) => {
     try {

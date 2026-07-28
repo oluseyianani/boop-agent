@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMemo, useState } from "react";
+import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api.js";
 import { ContentDetailDrawer } from "./ContentDetailDrawer.js";
-import { AnalystSection } from "./ContentAnalyst.js";
+import { ClipLibrary } from "./ClipLibrary.js";
+import { MarkPostedModal } from "./MarkPostedModal.js";
 import {
   EmptyState,
   HeaderPill,
@@ -14,8 +15,18 @@ import {
 } from "./PanelPrimitives.js";
 
 // Content desk panel (fork-local addition, see CONTENT.md).
-// Phase 1: read the migrated desk (ideas, scripts, calendar, log) and mark
-// slots posted per platform. Planning/refresh automations arrive in phase 2.
+// On-demand desk: reference clips, the idea bank with cooldowns, the calendar,
+// the UGC brief composer (in the detail drawer), and the content log. Mark any
+// idea posted per platform with its link. No scheduled engine or scraping.
+
+// What a "Mark posted" trigger opens the modal with.
+interface MarkTarget {
+  ideaId: string;
+  ideaTitle: string;
+  slotKey?: string;
+  presetPlatform?: string;
+  format?: string;
+}
 
 interface SlotRow {
   slotKey: string;
@@ -45,23 +56,6 @@ interface LogRow {
   platform: string;
   source: string;
   postedAt: number;
-}
-
-interface RunRow {
-  runId: string;
-  trigger: string;
-  status: "running" | "completed" | "failed";
-  steps?: string;
-  error?: string;
-  startedAt: number;
-  completedAt?: number;
-}
-
-interface EngineStatus {
-  armed: boolean;
-  schedule: string;
-  timezone: string;
-  running: boolean;
 }
 
 type Usage = Record<
@@ -133,6 +127,7 @@ function ProjectView({
 }) {
   const project = projects.find((p) => p.projectId === projectId)!;
   const [detail, setDetail] = useState<{ ideaId: string; format?: string } | null>(null);
+  const [markTarget, setMarkTarget] = useState<MarkTarget | null>(null);
   const config = useMemo(() => {
     try {
       return JSON.parse(project.config) as Record<string, unknown> & {
@@ -229,26 +224,18 @@ function ProjectView({
         )
       }
     >
-      <EngineCard isDark={isDark} projectId={projectId} />
-
-      <AnalystSection
-        isDark={isDark}
-        projectId={projectId}
-        ownHandle={(config.instagramHandle as string) ?? ""}
-        competitors={(config.competitors as { handle: string; why?: string }[]) ?? []}
-      />
+      <ClipLibrary isDark={isDark} projectId={projectId} />
 
       <section className={panelCardClass(isDark, "p-4")}>
         <h3 className="text-sm font-medium">This week</h3>
         <p className={`mt-0.5 text-xs ${mutedTextClass(isDark)}`}>
-          Yesterday through the next 7 days. Instagram posts are auto-matched (phase 2);
-          mark other platforms here.
+          Yesterday through the next 7 days. Mark a slot posted to capture its link per platform.
         </p>
         <div className="mt-3 space-y-3">
           {slotsByDate.length === 0 && (
             <EmptyState isDark={isDark}>
-              No planned slots in this window. The planner automation lands in phase 2 —
-              until then, slots come from the import.
+              No planned slots in this window. Add slots from the import, or just mark ideas
+              posted directly from the bank below.
             </EmptyState>
           )}
           {slotsByDate.map(({ date, list }) => (
@@ -264,6 +251,15 @@ function ProjectView({
                     platforms={platforms}
                     isDark={isDark}
                     onOpen={() => setDetail({ ideaId: slot.ideaId, format: slot.format })}
+                    onMark={(presetPlatform) =>
+                      setMarkTarget({
+                        ideaId: slot.ideaId,
+                        ideaTitle: slot.title ?? slot.ideaId,
+                        slotKey: slot.slotKey,
+                        presetPlatform,
+                        format: slot.format,
+                      })
+                    }
                   />
                 ))}
               </div>
@@ -288,7 +284,8 @@ function ProjectView({
                   <th className="pb-2 pr-3 font-medium">Enemy</th>
                   <th className="pb-2 pr-3 font-medium">Used</th>
                   <th className="pb-2 pr-3 font-medium">Last posted</th>
-                  <th className="pb-2 font-medium">State</th>
+                  <th className="pb-2 pr-3 font-medium">State</th>
+                  <th className="pb-2 font-medium"></th>
                 </tr>
               </thead>
               <tbody className={bodyTextClass(isDark)}>
@@ -315,12 +312,28 @@ function ProjectView({
                         <td className="py-2 pr-3">{idea.enemy}</td>
                         <td className="py-2 pr-3 mono">{u?.timesUsed ?? 0}</td>
                         <td className="py-2 pr-3">{lastPosted ? formatWhen(lastPosted) : "—"}</td>
-                        <td className="py-2">
+                        <td className="py-2 pr-3">
                           <StatePill
                             isDark={isDark}
                             label={idea.retired ? "retired" : cooling ? "cooling" : "ready"}
                             tone={idea.retired ? "muted" : cooling ? "warn" : "ok"}
                           />
+                        </td>
+                        <td className="py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMarkTarget({ ideaId: idea.ideaId, ideaTitle: idea.title });
+                            }}
+                            className={`rounded-lg border px-2 py-0.5 text-[10px] font-medium ${
+                              isDark
+                                ? "border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10"
+                                : "border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100"
+                            }`}
+                          >
+                            mark posted
+                          </button>
                         </td>
                       </tr>
                     );
@@ -391,145 +404,21 @@ function ProjectView({
           onClose={() => setDetail(null)}
         />
       )}
-    </PanelPage>
-  );
-}
 
-function EngineCard({ isDark, projectId }: { isDark: boolean; projectId: string }) {
-  const [engine, setEngine] = useState<EngineStatus | null>(null);
-  const [triggering, setTriggering] = useState(false);
-  const enabledSetting = useQuery(api.settings.get, { key: "content_engine_enabled" }) as
-    | string
-    | null
-    | undefined;
-  const setSetting = useMutation(api.settings.set);
-  const runs = useQuery(api.content.recentContentRuns, { projectId, limit: 5 }) as
-    | RunRow[]
-    | undefined;
-  const enabled = enabledSetting !== "false";
-  const latest = runs?.[0];
-  const latestSteps: { step: string; ok: boolean; detail: string }[] = useMemo(() => {
-    try {
-      return latest?.steps ? JSON.parse(latest.steps) : [];
-    } catch {
-      return [];
-    }
-  }, [latest?.steps]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/content/engine", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((s) => {
-        if (!cancelled) setEngine(s);
-      })
-      .catch(() => {
-        if (!cancelled) setEngine(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [latest?.status]);
-
-  async function runNow() {
-    setTriggering(true);
-    try {
-      await fetch("/api/content/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-    } finally {
-      setTriggering(false);
-    }
-  }
-
-  return (
-    <section className={panelCardClass(isDark, "p-4")}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-medium">Weekly engine</h3>
-          <p className={`mt-0.5 text-xs ${mutedTextClass(isDark)}`}>
-            Pull → auto-match → bank refresh → plan → summary memory → digest.{" "}
-            {engine
-              ? engine.armed
-                ? `Scheduled ${engine.schedule} (${engine.timezone}).`
-                : "Not armed on this server (manual runs only)."
-              : "Engine status unavailable."}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setSetting({ key: "content_engine_enabled", value: enabled ? "false" : "true" })}
-            className={`rounded-lg border px-2 py-1 text-[11px] font-medium ${
-              enabled
-                ? isDark
-                  ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
-                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : isDark
-                  ? "border-white/10 bg-white/5 text-zinc-500"
-                  : "border-zinc-200 bg-zinc-50 text-zinc-500"
-            }`}
-            title="Applies to scheduled runs; manual runs always work"
-          >
-            {enabled ? "enabled" : "disabled"}
-          </button>
-          <button
-            type="button"
-            disabled={triggering || latest?.status === "running"}
-            onClick={runNow}
-            className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium disabled:opacity-50 ${
-              isDark
-                ? "border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10"
-                : "border-zinc-200 bg-zinc-50 text-zinc-900 hover:bg-zinc-100"
-            }`}
-          >
-            {latest?.status === "running" ? "running…" : "Run now"}
-          </button>
-        </div>
-      </div>
-
-      {latest && (
-        <div className={subtlePanelClass(isDark, "mt-3 px-3 py-2 text-xs")}>
-          <div className="flex items-center justify-between gap-2">
-            <span className={bodyTextClass(isDark)}>
-              Last run: <span className="mono">{latest.trigger}</span> ·{" "}
-              {new Date(latest.startedAt).toLocaleString("en-GB", {
-                day: "numeric",
-                month: "short",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </span>
-            <span
-              className={
-                latest.status === "completed"
-                  ? "text-emerald-500"
-                  : latest.status === "failed"
-                    ? "text-rose-400"
-                    : "text-amber-400"
-              }
-            >
-              {latest.status}
-            </span>
-          </div>
-          {latestSteps.length > 0 && (
-            <ul className={`mt-1.5 space-y-0.5 ${mutedTextClass(isDark)}`}>
-              {latestSteps.map((s) => (
-                <li key={s.step}>
-                  <span className={s.ok ? "text-emerald-500" : "text-rose-400"}>
-                    {s.ok ? "✓" : "✗"}
-                  </span>{" "}
-                  {s.step}: {s.detail}
-                </li>
-              ))}
-            </ul>
-          )}
-          {latest.error && <div className="mt-1 text-rose-400">{latest.error}</div>}
-        </div>
+      {markTarget && (
+        <MarkPostedModal
+          isDark={isDark}
+          projectId={projectId}
+          ideaId={markTarget.ideaId}
+          ideaTitle={markTarget.ideaTitle}
+          platforms={platforms}
+          presetPlatform={markTarget.presetPlatform}
+          slotKey={markTarget.slotKey}
+          format={markTarget.format}
+          onClose={() => setMarkTarget(null)}
+        />
       )}
-    </section>
+    </PanelPage>
   );
 }
 
@@ -538,24 +427,14 @@ function SlotCard({
   platforms,
   isDark,
   onOpen,
+  onMark,
 }: {
   slot: SlotRow;
   platforms: string[];
   isDark: boolean;
   onOpen: () => void;
+  onMark: (presetPlatform?: string) => void;
 }) {
-  const markPosted = useMutation(api.content.markSlotPosted);
-  const [pending, setPending] = useState<string | null>(null);
-
-  async function handleMark(platform: string) {
-    setPending(platform);
-    try {
-      await markPosted({ slotKey: slot.slotKey, platform });
-    } finally {
-      setPending(null);
-    }
-  }
-
   return (
     <div
       onClick={onOpen}
@@ -594,19 +473,18 @@ function SlotCard({
               <button
                 key={platform}
                 type="button"
-                disabled={pending !== null}
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleMark(platform);
+                  onMark(platform);
                 }}
-                className={`rounded-lg border px-2 py-1 text-[10px] font-medium disabled:opacity-50 ${
+                className={`rounded-lg border px-2 py-1 text-[10px] font-medium ${
                   isDark
                     ? "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
                     : "border-zinc-200 bg-zinc-50 text-zinc-800 hover:bg-zinc-100"
                 }`}
                 title={`Mark posted on ${platform}`}
               >
-                {pending === platform ? "…" : platform}
+                {platform}
               </button>
             ))}
           </div>

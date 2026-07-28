@@ -73,7 +73,7 @@ export function createContentTools(): RuntimeTool[] {
     defineRuntimeTool(
       NAMESPACE,
       "get_content_idea",
-      `Full detail for one content idea: the angle, all 3 hooks, the beat-by-beat faceless script, CTA, and the UGC creator brief. Use after list_content_ideas when the user wants the actual content for an idea.`,
+      `Full detail for one content idea: the angle, all 3 hooks, the beat-by-beat script, CTA, and the UGC creator brief. Use after list_content_ideas when the user wants the actual content for an idea.`,
       {
         idea_id: z.string().describe("The ideaId from list_content_ideas."),
       },
@@ -135,18 +135,26 @@ export function createContentTools(): RuntimeTool[] {
     defineRuntimeTool(
       NAMESPACE,
       "mark_content_posted",
-      `Mark a calendar slot as posted on one platform (instagram | tiktok | facebook | youtube-shorts). Stamps the slot and writes the content log that drives idea cooldowns. Use when the user says they posted something.`,
+      `Mark a content idea as posted on one platform (instagram | tiktok | facebook | youtube-shorts), capturing the live link. Writes the content log that drives idea cooldowns; the link lets a future stats pull track the post. Use when the user says they posted something. Pass the link if they give one.`,
       {
-        slot_key: z.string().describe("The slotKey from get_content_slots."),
+        idea_id: z.string().describe("The ideaId from list_content_ideas / get_content_slots."),
         platform: z.string().describe("Platform it was posted on."),
+        url: z.string().optional().describe("Link to the posted video, if available."),
+        slot_key: z.string().optional().describe("The slotKey from get_content_slots, to stamp the calendar too."),
       },
       async (args) => {
-        const result = await convex.mutation(api.content.markSlotPosted, {
+        const project = await defaultProject();
+        if (!project) return runtimeText("No content project configured.", false);
+        const { written } = (await convex.mutation(api.content.markIdeaPosted, {
+          projectId: project.projectId,
+          ideaId: args.idea_id,
           slotKey: args.slot_key,
-          platform: args.platform,
-        });
+          posts: [{ platform: args.platform, url: args.url ?? "" }],
+        })) as { written: number };
         return runtimeText(
-          result ? `Marked posted on ${args.platform}.` : `No slot "${args.slot_key}".`,
+          written
+            ? `Marked "${args.idea_id}" posted on ${args.platform}.`
+            : `Already logged "${args.idea_id}" on ${args.platform}.`,
         );
       },
     ),

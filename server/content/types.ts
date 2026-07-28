@@ -33,6 +33,27 @@ export interface BankScript {
   ugcBrief?: string;
 }
 
+// One UGC video brief (Seedance). Rigid fields; rendered to a short directive
+// prompt by the frontend composer. Mirrors debug/src/lib/contentPrompts.ts.
+export interface UgcBrief {
+  id: string;
+  label?: string;
+  referenceClips?: string[]; // clipIds, in [Video1], [Video2]… order
+  scene?: string;
+  actorBlocking?: string;
+  camera?: string;
+  appMoment?: string;
+  voiceover?: string; // verbatim spoken copy
+  mood?: string;
+}
+
+// The Creative Director pack stored per idea (contentIdeas.creative JSON).
+// Replaced the faceless genPrompts model in the UGC rewrite.
+export interface CreativePack {
+  ugcBriefs?: UgcBrief[];
+  assets?: string[];
+}
+
 export interface Bank {
   version?: number;
   updatedAt?: string;
