@@ -32,7 +32,7 @@ import {
 } from "./runtime-config.js";
 import { startImageCleanup } from "./images/clean.js";
 import { isPublicServerRequest, isTrustedLocalRequest } from "./local-access.js";
-import { analyzeTeardown, type TeardownRequest } from "./content/teardown.js";
+import { analyzeTeardown, type UgcRequest } from "./content/teardown.js";
 
 async function main() {
   await loadIntegrations();
@@ -77,21 +77,26 @@ async function main() {
     res.json({ ok: true, service: "boop-agent" });
   });
 
-  // Viral video teardown → drafted UGC brief (content desk, phase 4).
+  // Generate a framework-compliant UGC ad, optionally from a viral reference
+  // (content desk, phase 4 — the UGC Script Writing System).
   app.post("/content/teardown", async (req, res) => {
     try {
-      const body = (req.body ?? {}) as TeardownRequest;
-      const frames = Array.isArray(body.frameStorageIds)
-        ? body.frameStorageIds.filter((s): s is string => typeof s === "string").slice(0, 8)
-        : undefined;
+      const body = (req.body ?? {}) as UgcRequest;
+      const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+      const arr = (v: unknown) =>
+        Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : undefined;
       const result = await analyzeTeardown({
-        product: typeof body.product === "string" ? body.product : undefined,
-        platform: typeof body.platform === "string" ? body.platform : undefined,
-        url: typeof body.url === "string" ? body.url : undefined,
-        caption: typeof body.caption === "string" ? body.caption : undefined,
-        notes: typeof body.notes === "string" ? body.notes : undefined,
-        frameStorageIds: frames,
+        product: str(body.product),
+        format: str(body.format),
+        variationType: str(body.variationType),
+        enemy: str(body.enemy),
         idea: body.idea && typeof body.idea === "object" ? body.idea : undefined,
+        elements: arr(body.elements),
+        platform: str(body.platform),
+        url: str(body.url),
+        caption: str(body.caption),
+        notes: str(body.notes),
+        frameStorageIds: arr(body.frameStorageIds)?.slice(0, 8),
       });
       res.json(result);
     } catch (err) {

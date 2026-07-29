@@ -77,6 +77,21 @@ export const contentTables = {
     .index("by_project", ["projectId"])
     .index("by_project_ref", ["projectId", "refId"]),
 
+  // Pinned avatars — a reusable cast. The ad generator suggests a fresh avatar
+  // per brief; the user pins the good ones (keyed to a problem type) to reuse.
+  // `prompt` is the GPT Image 2 prompt; `imageStorageId` an optional generated face.
+  contentAvatars: defineTable({
+    projectId: v.string(),
+    avatarId: v.string(),
+    label: v.string(),
+    problemType: v.optional(v.string()),
+    prompt: v.string(),
+    imageStorageId: v.optional(v.id("_storage")),
+    createdAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_project_avatar", ["projectId", "avatarId"]),
+
   // Hook & Script output per idea: { hooks, beats, cta, ugcBrief } as JSON.
   contentScripts: defineTable({
     projectId: v.string(),

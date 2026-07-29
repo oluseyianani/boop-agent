@@ -174,6 +174,69 @@ export const deleteClip = mutation({
   },
 });
 
+// -------------------------------------------------- pinned avatars
+
+export const listAvatars = query({
+  args: { projectId: v.string() },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("contentAvatars")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .order("desc")
+      .take(100);
+    return await Promise.all(
+      rows.map(async (r) => ({
+        avatarId: r.avatarId,
+        label: r.label,
+        problemType: r.problemType,
+        prompt: r.prompt,
+        imageUrl: r.imageStorageId ? await ctx.storage.getUrl(r.imageStorageId) : null,
+        createdAt: r.createdAt,
+      })),
+    );
+  },
+});
+
+export const saveAvatar = mutation({
+  args: {
+    projectId: v.string(),
+    avatarId: v.string(),
+    label: v.string(),
+    problemType: v.optional(v.string()),
+    prompt: v.string(),
+    imageStorageId: v.optional(v.id("_storage")),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("contentAvatars")
+      .withIndex("by_project_avatar", (q) =>
+        q.eq("projectId", args.projectId).eq("avatarId", args.avatarId),
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, args);
+      return existing._id;
+    }
+    return await ctx.db.insert("contentAvatars", { ...args, createdAt: Date.now() });
+  },
+});
+
+export const deleteAvatar = mutation({
+  args: { projectId: v.string(), avatarId: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("contentAvatars")
+      .withIndex("by_project_avatar", (q) =>
+        q.eq("projectId", args.projectId).eq("avatarId", args.avatarId),
+      )
+      .unique();
+    if (!row) return null;
+    if (row.imageStorageId) await ctx.storage.delete(row.imageStorageId);
+    await ctx.db.delete(row._id);
+    return row._id;
+  },
+});
+
 // -------------------------------------------------- viral references
 
 export const listViralReferences = query({

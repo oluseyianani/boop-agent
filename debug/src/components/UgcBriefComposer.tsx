@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api.js";
 import {
   composeUgcPrompt,
+  composeScenePrompt,
   isBriefRenderable,
   type CreativePack,
   type UgcBrief,
@@ -17,16 +18,6 @@ interface IdeaContext {
   angle?: string;
 }
 
-interface DraftBrief {
-  label?: string;
-  voiceover?: string;
-  mood?: string;
-  scene?: string;
-  actorBlocking?: string;
-  camera?: string;
-  appMoment?: string;
-}
-
 // Composer for an idea's UGC briefs. Rigid fields (scene / actor / camera /
 // app moment / voiceover / mood) + a reference-clip picker, with a live
 // Seedance-ready prompt preview. Persists the whole ugcBriefs array into the
@@ -36,6 +27,15 @@ interface ClipOption {
   clipId: string;
   label: string;
   tag: string;
+}
+
+interface AvatarRow {
+  avatarId: string;
+  label: string;
+  problemType?: string;
+  prompt: string;
+  imageUrl: string | null;
+  createdAt: number;
 }
 
 const MOODS = ["neutral", "excited", "calm", "frustrated", "relieved", "playful"];
@@ -71,26 +71,27 @@ export function UgcBriefComposer({
   idea?: IdeaContext;
 }) {
   const setIdeaCreative = useMutation(api.content.setIdeaCreative);
+  const saveAvatar = useMutation(api.content.saveAvatar);
+  const deleteAvatar = useMutation(api.content.deleteAvatar);
+  const avatars = (useQuery(api.content.listAvatars, { projectId }) as AvatarRow[] | undefined) ?? [];
   const [briefs, setBriefs] = useState<UgcBrief[]>(() => creative?.ugcBriefs ?? []);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [teardownOpen, setTeardownOpen] = useState(false);
 
-  function addFromDraft(draft: DraftBrief, refId: string) {
-    setBriefs((prev) => [
-      ...prev,
-      {
-        ...newBrief(),
-        label: draft.label,
-        viralReferenceId: refId,
-        voiceover: draft.voiceover ?? "",
-        mood: draft.mood ?? "neutral",
-        scene: draft.scene ?? "",
-        actorBlocking: draft.actorBlocking ?? "",
-        camera: draft.camera ?? "",
-        appMoment: draft.appMoment ?? "",
-      },
-    ]);
+  function addFromAd(brief: Partial<UgcBrief>, refId: string) {
+    setBriefs((prev) => [...prev, { ...newBrief(), ...brief, id: newBrief().id, viralReferenceId: refId }]);
+  }
+
+  function pinAvatar(brief: UgcBrief) {
+    if (!brief.avatarPrompt) return;
+    void saveAvatar({
+      projectId,
+      avatarId: `av-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+      label: brief.label || brief.hook?.slice(0, 24) || "avatar",
+      problemType: brief.label,
+      prompt: brief.avatarPrompt,
+    });
   }
 
   const initial = useMemo(() => JSON.stringify(creative?.ugcBriefs ?? []), [creative]);
@@ -150,8 +151,11 @@ export function UgcBriefComposer({
             brief={brief}
             index={idx}
             clips={clips}
+            avatars={avatars}
             onChange={(patch) => update(brief.id, patch)}
             onRemove={() => setBriefs((prev) => prev.filter((b) => b.id !== brief.id))}
+            onPin={() => pinAvatar(brief)}
+            onDeleteAvatar={(avatarId) => void deleteAvatar({ projectId, avatarId })}
           />
         ))}
 
@@ -187,8 +191,9 @@ export function UgcBriefComposer({
           projectId={projectId}
           product={product}
           idea={idea}
+          elements={clips.map((c) => c.label)}
           onClose={() => setTeardownOpen(false)}
-          onUse={addFromDraft}
+          onUse={addFromAd}
         />
       )}
     </section>
@@ -200,15 +205,21 @@ function BriefCard({
   brief,
   index,
   clips,
+  avatars,
   onChange,
   onRemove,
+  onPin,
+  onDeleteAvatar,
 }: {
   isDark: boolean;
   brief: UgcBrief;
   index: number;
   clips: ClipOption[];
+  avatars: AvatarRow[];
   onChange: (patch: Partial<UgcBrief>) => void;
   onRemove: () => void;
+  onPin: () => void;
+  onDeleteAvatar: (avatarId: string) => void;
 }) {
   const selected = brief.referenceClips ?? [];
   const prompt = composeUgcPrompt(brief);
@@ -244,6 +255,52 @@ function BriefCard({
           ×
         </button>
       </div>
+
+      {/* Framework fields (from the ad generator) */}
+      {(brief.hook || brief.avatarPrompt || (brief.scenes?.length ?? 0) > 0) && (
+        <div className="space-y-2">
+          {brief.hook && (
+            <div>
+              <div className={`mb-0.5 text-[10px] uppercase tracking-[0.08em] ${mutedTextClass(isDark)}`}>
+                Hook{brief.format ? ` · ${brief.format}` : ""}
+              </div>
+              <p className={`text-xs ${bodyTextClass(isDark)}`}>{brief.hook}</p>
+            </div>
+          )}
+          {(brief.scenes?.length ?? 0) > 0 && (
+            <div>
+              <div className={`mb-1 text-[10px] uppercase tracking-[0.08em] ${mutedTextClass(isDark)}`}>
+                Scene prompts · @asset {brief.scenes!.map((s) => (s.assetIncluded ? "YES" : "NO")).join("/")}
+              </div>
+              <div className="space-y-1.5">
+                {brief.scenes!.map((s, i) => {
+                  const text = composeScenePrompt(s, i);
+                  return (
+                    <div key={i} className={`rounded-lg border p-2 ${isDark ? "border-white/10" : "border-zinc-200"}`}>
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <span className={`text-[10px] ${mutedTextClass(isDark)}`}>
+                          Scene {i + 1} — {s.beat}
+                        </span>
+                        <CopyButton text={text} isDark={isDark} />
+                      </div>
+                      <pre className={`whitespace-pre-wrap text-[11px] leading-relaxed ${bodyTextClass(isDark)}`}>{text}</pre>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <AvatarSection
+        isDark={isDark}
+        brief={brief}
+        avatars={avatars}
+        onChange={onChange}
+        onPin={onPin}
+        onDeleteAvatar={onDeleteAvatar}
+      />
 
       {/* Reference clips → [Video1], [Video2]… in selection order */}
       <Field label="Reference clips" isDark={isDark}>
@@ -349,27 +406,105 @@ function BriefCard({
         />
       </Field>
 
-      {/* Live Seedance-ready prompt */}
-      <div className={`rounded-lg border ${isDark ? "border-white/10 bg-black/20" : "border-zinc-200 bg-zinc-50"} p-2.5`}>
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <span className={`text-[10px] uppercase tracking-[0.08em] ${mutedTextClass(isDark)}`}>
-            Seedance prompt
-          </span>
-          <CopyButton text={prompt} isDark={isDark} disabled={!isBriefRenderable(brief)} />
+      {/* Live Seedance prompt — only for manual briefs; framework briefs use the
+          per-scene prompts above instead. */}
+      {!(brief.scenes?.length) && (
+        <div className={`rounded-lg border ${isDark ? "border-white/10 bg-black/20" : "border-zinc-200 bg-zinc-50"} p-2.5`}>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <span className={`text-[10px] uppercase tracking-[0.08em] ${mutedTextClass(isDark)}`}>
+              Seedance prompt
+            </span>
+            <CopyButton text={prompt} isDark={isDark} disabled={!isBriefRenderable(brief)} />
+          </div>
+          <pre className={`whitespace-pre-wrap text-[11px] leading-relaxed ${bodyTextClass(isDark)}`}>
+            {prompt}
+          </pre>
+          {selected.length > 0 && (
+            <div className={`mt-1.5 border-t pt-1.5 text-[10px] ${isDark ? "border-white/10" : "border-zinc-200"} ${mutedTextClass(isDark)}`}>
+              {selected.map((id, i) => (
+                <div key={id}>
+                  <span className="mono">[Video{i + 1}]</span> = {clipLabel(id)}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        <pre className={`whitespace-pre-wrap text-[11px] leading-relaxed ${bodyTextClass(isDark)}`}>
-          {prompt}
-        </pre>
-        {selected.length > 0 && (
-          <div className={`mt-1.5 border-t pt-1.5 text-[10px] ${isDark ? "border-white/10" : "border-zinc-200"} ${mutedTextClass(isDark)}`}>
-            {selected.map((id, i) => (
-              <div key={id}>
-                <span className="mono">[Video{i + 1}]</span> = {clipLabel(id)}
-              </div>
-            ))}
+      )}
+    </div>
+  );
+}
+
+function AvatarSection({
+  isDark,
+  brief,
+  avatars,
+  onChange,
+  onPin,
+  onDeleteAvatar,
+}: {
+  isDark: boolean;
+  brief: UgcBrief;
+  avatars: AvatarRow[];
+  onChange: (patch: Partial<UgcBrief>) => void;
+  onPin: () => void;
+  onDeleteAvatar: (avatarId: string) => void;
+}) {
+  if (!avatars.length && !brief.avatarPrompt) return null;
+  return (
+    <div className={`rounded-lg border ${isDark ? "border-white/10 bg-black/20" : "border-zinc-200 bg-zinc-50"} p-2.5`}>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <span className={`text-[10px] uppercase tracking-[0.08em] ${mutedTextClass(isDark)}`}>
+          Avatar (GPT Image 2)
+        </span>
+        {brief.avatarPrompt && (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={onPin}
+              className={`rounded-lg border px-2 py-0.5 text-[10px] font-medium ${
+                isDark ? "border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10" : "border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100"
+              }`}
+            >
+              pin
+            </button>
+            <CopyButton text={brief.avatarPrompt} isDark={isDark} />
           </div>
         )}
       </div>
+
+      {avatars.length > 0 && (
+        <div className="mb-1.5 flex flex-wrap gap-1">
+          {avatars.map((a) => {
+            const on = brief.avatarId === a.avatarId;
+            return (
+              <span
+                key={a.avatarId}
+                className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] ${
+                  on
+                    ? isDark ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300" : "border-emerald-300 bg-emerald-50 text-emerald-700"
+                    : isDark ? "border-white/10 text-zinc-400" : "border-zinc-200 text-zinc-500"
+                }`}
+              >
+                <button type="button" onClick={() => onChange({ avatarPrompt: a.prompt, avatarId: a.avatarId })}>
+                  {a.label}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDeleteAvatar(a.avatarId)}
+                  aria-label={`Delete avatar ${a.label}`}
+                  className={isDark ? "text-zinc-600 hover:text-zinc-300" : "text-zinc-400 hover:text-zinc-600"}
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {brief.avatarPrompt && (
+        <p className={`whitespace-pre-wrap text-[11px] ${bodyTextClass(isDark)}`}>{brief.avatarPrompt}</p>
+      )}
     </div>
   );
 }
