@@ -5,6 +5,7 @@ import { api } from "../../../convex/_generated/api.js";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { UgcBrief } from "../lib/contentPrompts.js";
 import { extractFrames } from "../lib/videoFrames.js";
+import { AdSections } from "./AdSections.js";
 import { bodyTextClass, mutedTextClass, subtlePanelClass } from "./PanelPrimitives.js";
 
 // Generate a framework-compliant UGC ad, optionally from a viral reference.
@@ -28,6 +29,7 @@ interface Ad {
   hook?: string;
   analogy?: string;
   script?: string;
+  universalBlock?: string;
   scenes: AdScene[];
   avatarPrompt?: string;
   caption?: string;
@@ -60,6 +62,7 @@ function adToBrief(ad: Ad, refId: string): Partial<UgcBrief> {
     format: ad.format,
     hook: ad.hook,
     analogy: ad.analogy,
+    universalBlock: ad.universalBlock,
     scenes: ad.scenes,
     avatarPrompt: ad.avatarPrompt,
     caption: ad.caption,
@@ -251,43 +254,14 @@ export function ViralTeardownModal({
                 {ad.variationType && <Tag isDark={isDark}>{ad.variationType}</Tag>}
                 {ad.enemy && <Tag isDark={isDark}>enemy: {ad.enemy}</Tag>}
               </div>
-              {ad.hook && (
-                <Block title="Hook" isDark={isDark}>
-                  <p className={bodyTextClass(isDark)}>{ad.hook}</p>
-                </Block>
-              )}
-              {ad.script && (
-                <Block title="Voiceover" isDark={isDark} copy={ad.script}>
-                  <p className={`whitespace-pre-wrap ${bodyTextClass(isDark)}`}>{ad.script}</p>
-                </Block>
-              )}
-              {ad.analogy && (
-                <Block title="Analogy (the money line)" isDark={isDark}>
-                  <p className={bodyTextClass(isDark)}>{ad.analogy}</p>
-                </Block>
-              )}
-              {ad.scenes.length > 0 && (
-                <Block title={`Scenes (@asset ${ad.scenes.map((s) => (s.assetIncluded ? "YES" : "NO")).join("/")})`} isDark={isDark}>
-                  <div className="space-y-1.5">
-                    {ad.scenes.map((s, i) => (
-                      <div key={i} className={`rounded-lg border p-2 text-[11px] ${isDark ? "border-white/10" : "border-zinc-200"}`}>
-                        <div className={`font-medium ${bodyTextClass(isDark)}`}>
-                          {i + 1}. {s.beat}{s.seconds ? ` · ${s.seconds}s` : ""}{s.assetIncluded ? ` · ${s.asset ?? "@asset"}` : " · no product"}
-                        </div>
-                        <div className={mutedTextClass(isDark)}>{s.direction}</div>
-                        {s.voiceover && <div className={`mt-0.5 ${bodyTextClass(isDark)}`}>"{s.voiceover}"</div>}
-                      </div>
-                    ))}
-                  </div>
-                </Block>
-              )}
-              {ad.avatarPrompt && (
-                <Block title="Avatar prompt (GPT Image 2)" isDark={isDark} copy={ad.avatarPrompt}>
-                  <p className={`whitespace-pre-wrap ${bodyTextClass(isDark)}`}>{ad.avatarPrompt}</p>
-                </Block>
-              )}
+              <AdSections
+                isDark={isDark}
+                universalBlock={ad.universalBlock}
+                scenes={ad.scenes}
+                avatarPrompt={ad.avatarPrompt}
+              />
               {ad.caption && (
-                <Block title="Caption" isDark={isDark} copy={ad.caption}>
+                <Block title="Caption (for the post)" isDark={isDark} copy={ad.caption}>
                   <p className={bodyTextClass(isDark)}>{ad.caption}</p>
                 </Block>
               )}

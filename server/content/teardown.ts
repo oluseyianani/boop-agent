@@ -39,6 +39,7 @@ export interface Ad {
   hook?: string;
   analogy?: string;
   script?: string;
+  universalBlock?: string; // pasted unchanged into every chunk
   scenes: AdScene[];
   avatarPrompt?: string;
   caption?: string;

@@ -31,6 +31,7 @@ export interface UgcBrief {
   format?: string; // mid_funnel | full_stack | animated_infomercial
   hook?: string;
   analogy?: string;
+  universalBlock?: string; // pasted unchanged into every chunk generation
   scenes?: UgcScene[];
   avatarPrompt?: string; // GPT Image 2 prompt for the avatar
   avatarId?: string; // pinned avatar this brief uses
@@ -44,18 +45,46 @@ export interface UgcBrief {
   mood?: string; // "neutral" | "excited" | …
 }
 
-// A per-scene prompt block for a Higgsfield/Seedance generation.
+// The swappable chunk text — everything specific to ONE scene. Meant to be
+// pasted AFTER the universal direction block for a single generation.
 export function composeScenePrompt(scene: UgcScene, index: number): string {
   const lines = [
-    `Scene ${index + 1} — ${scene.beat}${scene.seconds ? ` (${scene.seconds}s)` : ""}`,
+    `Chunk ${index + 1} — ${scene.beat}${scene.seconds ? ` · ${scene.seconds}s` : ""}`,
     scene.direction,
     scene.assetIncluded && scene.asset
       ? `Show ${scene.asset} at the moment it is named.`
-      : "No product/app on screen in this scene.",
+      : "No product/app on screen in this chunk.",
     scene.continuity ? `Continuity: ${scene.continuity}` : "",
     scene.voiceover ? `Voiceover: "${scene.voiceover}"` : "",
   ];
   return lines.filter(Boolean).join("\n");
+}
+
+// The elements a user must attach in Higgsfield, tagged to the chunks that use
+// them. Derived from the scenes' @asset tokens + the avatar.
+export interface AdElement {
+  name: string;
+  kind: "app" | "avatar";
+  scenes: number[]; // 1-based chunk numbers
+}
+
+export function deriveElements(
+  brief: Pick<UgcBrief, "scenes" | "avatarPrompt" | "avatarId">,
+): AdElement[] {
+  const out: AdElement[] = [];
+  const total = brief.scenes?.length ?? 0;
+  if (brief.avatarPrompt || brief.avatarId) {
+    out.push({ name: "avatar", kind: "avatar", scenes: Array.from({ length: total }, (_, i) => i + 1) });
+  }
+  const byAsset = new Map<string, number[]>();
+  (brief.scenes ?? []).forEach((s, i) => {
+    if (s.assetIncluded && s.asset) {
+      const key = s.asset.trim();
+      byAsset.set(key, [...(byAsset.get(key) ?? []), i + 1]);
+    }
+  });
+  for (const [name, scenes] of byAsset) out.push({ name, kind: "app", scenes });
+  return out;
 }
 
 // The Creative Director pack stored on an idea (contentIdeas.creative JSON).

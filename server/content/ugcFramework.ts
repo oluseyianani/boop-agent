@@ -33,6 +33,10 @@ DIRECTION (encode into each scene's direction): every shot has motion; visuals m
 
 FOR APPS: the "product asset" is a named reference element (e.g. @twizle-list-priced). Reference it where the @asset pattern says YES. Skin/residue rules do not apply.
 
+CHUNKED OUTPUT — how the ad is actually used: each scene is generated SEPARATELY in the video tool, then stitched in an editor, so continuity must come from a shared block, not from one long prompt.
+- "universalBlock": ONE prose block the user pastes UNCHANGED into every chunk generation. It contains: the character lock (the exact creator — gender, age, vibe, hair, outfit), the setting + lighting, the authenticity + app-interaction + UGC-realism direction, the hard consistency rules (same creator, same outfit, same lighting, same energy in every shot), 9:16 / natural iPhone quality, and an instruction to use the avatar element for the creator's face. It must NOT contain any scene-specific action, camera move, voiceover, or the product reveal — only what stays identical across all chunks.
+- "scenes": each scene is ONLY the swappable part. Its "direction" is the scene-specific camera + action ALONE (never repeat the universal block). The product/app element appears only per the format's @asset pattern (set assetIncluded + asset accordingly). This lets the user paste the universal block once and swap only the scene between generations.
+
 OUTPUT — return ONLY a single JSON object, no prose, no markdown fences:
 {
   "teardown": { "hook": "...", "whyItWorks": ["..."], "structure": [{"t":"0s","beat":"..."}], "voiceoverStyle": "...", "mood": "...", "pacing": "...", "format": "..." } | null,
@@ -43,15 +47,16 @@ OUTPUT — return ONLY a single JSON object, no prose, no markdown fences:
     "hook": "the opening line(s)",
     "analogy": "the tactile analogy line, verbatim as it appears in the script",
     "script": "the full voiceover, exactly as spoken",
+    "universalBlock": "the shared direction block, pasted unchanged into every chunk (character + setting/lighting + direction blocks + consistency rules + avatar element instruction). No scene-specific content.",
     "scenes": [
-      { "beat": "e.g. Hook+Reframe", "voiceover": "the exact line for this scene", "seconds": "5-7", "assetIncluded": false, "asset": "@element-name or empty", "direction": "camera + what the creator does", "continuity": "what must match" }
+      { "beat": "e.g. Hook+Reframe", "voiceover": "the exact line for this scene", "seconds": "5-7", "assetIncluded": false, "asset": "@element-name or empty", "direction": "ONLY the scene-specific camera + action (do not repeat the universal block)", "continuity": "what must match the previous chunk" }
     ],
     "avatarPrompt": "a GPT Image 2 prompt for a candid 9:16 avatar matched to this audience's emotional register",
     "caption": "lowercase organic caption, alludes not sells, <=1 soft emoji, no hashtags",
     "cta": "the soft close used"
   }
 }
-Set "teardown" to null when there is no viral reference to analyse. Keep the analogy intact. Obey the @asset NO/YES pattern for the chosen format.`;
+Set "teardown" to null when there is no viral reference to analyse. Keep the analogy intact. Obey the @asset NO/YES pattern for the chosen format. The universalBlock + one scene = one complete chunk prompt.`;
 
 // Build the per-request user message: product + idea/enemy + chosen dials + any
 // viral reference (with frames attached separately as image blocks).

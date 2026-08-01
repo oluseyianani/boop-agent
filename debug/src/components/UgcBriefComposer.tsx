@@ -3,12 +3,12 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api.js";
 import {
   composeUgcPrompt,
-  composeScenePrompt,
   isBriefRenderable,
   type CreativePack,
   type UgcBrief,
 } from "../lib/contentPrompts.js";
 import { ViralTeardownModal } from "./ViralTeardownModal.js";
+import { AdSections } from "./AdSections.js";
 import { bodyTextClass, mutedTextClass, subtlePanelClass } from "./PanelPrimitives.js";
 
 interface IdeaContext {
@@ -256,8 +256,8 @@ function BriefCard({
         </button>
       </div>
 
-      {/* Framework fields (from the ad generator) */}
-      {(brief.hook || brief.avatarPrompt || (brief.scenes?.length ?? 0) > 0) && (
+      {/* Framework ad — the copy-paste layout (universal block + chunks + elements) */}
+      {(brief.hook || (brief.scenes?.length ?? 0) > 0) && (
         <div className="space-y-2">
           {brief.hook && (
             <div>
@@ -267,29 +267,14 @@ function BriefCard({
               <p className={`text-xs ${bodyTextClass(isDark)}`}>{brief.hook}</p>
             </div>
           )}
-          {(brief.scenes?.length ?? 0) > 0 && (
-            <div>
-              <div className={`mb-1 text-[10px] uppercase tracking-[0.08em] ${mutedTextClass(isDark)}`}>
-                Scene prompts · @asset {brief.scenes!.map((s) => (s.assetIncluded ? "YES" : "NO")).join("/")}
-              </div>
-              <div className="space-y-1.5">
-                {brief.scenes!.map((s, i) => {
-                  const text = composeScenePrompt(s, i);
-                  return (
-                    <div key={i} className={`rounded-lg border p-2 ${isDark ? "border-white/10" : "border-zinc-200"}`}>
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <span className={`text-[10px] ${mutedTextClass(isDark)}`}>
-                          Scene {i + 1} — {s.beat}
-                        </span>
-                        <CopyButton text={text} isDark={isDark} />
-                      </div>
-                      <pre className={`whitespace-pre-wrap text-[11px] leading-relaxed ${bodyTextClass(isDark)}`}>{text}</pre>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          <AdSections
+            isDark={isDark}
+            universalBlock={brief.universalBlock}
+            scenes={brief.scenes}
+            avatarPrompt={brief.avatarPrompt}
+            avatarId={brief.avatarId}
+            showAvatar={false}
+          />
         </div>
       )}
 
@@ -454,7 +439,7 @@ function AvatarSection({
     <div className={`rounded-lg border ${isDark ? "border-white/10 bg-black/20" : "border-zinc-200 bg-zinc-50"} p-2.5`}>
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <span className={`text-[10px] uppercase tracking-[0.08em] ${mutedTextClass(isDark)}`}>
-          Avatar (GPT Image 2)
+          ① Avatar — make this element first
         </span>
         {brief.avatarPrompt && (
           <div className="flex items-center gap-1.5">
