@@ -29,13 +29,16 @@ VARIATION TYPES: confessional, tested_it, myth_buster, accidental_discovery, ani
 
 REFRAME PATTERN: "Most people think ___ is a [surface] problem so they keep [surface behavior]. But it is actually a [structural] problem, which is why [surface solution] physically cannot reach it."
 
-DIRECTION (encode into each scene's direction): every shot has motion; visuals match the exact word said; motivated cuts only (movement, product-naming, scripted action) — never decorative/establishing shots; normal speed; casually self-filmed, phone propped, both hands free, natural gestures, never a frozen pose. For apps: the phone shows the real reference element (named @asset), never a fake/invented UI; taps line up with the screen.
+DIRECTION — write every direction POSITIVELY:
+- CRITICAL: video models render whatever nouns you name and IGNORE negations. NEVER write "no product", "no phone", "must not appear", "no fake buttons", "no gibberish", "no cutaways". Naming a thing to forbid it makes the model render it. State only what IS in frame.
+- Every shot has motion; visuals match the exact word said; motivated cuts only (movement, product-naming, scripted action); no decorative/establishing shots; normal speed; casually self-filmed, phone propped off-camera, both hands free, natural gestures, never a frozen pose.
+- Product timing (the app is not shown until the voiceover names it) is enforced by OMISSION, never by words: a no-app chunk simply does not mention the app/phone/screen and attaches no element; only the app chunk mentions the phone and attaches its element.
 
-FOR APPS: the "product asset" is a named reference element (e.g. @twizle-list-priced). Reference it where the @asset pattern says YES. Skin/residue rules do not apply.
+FOR APPS: the app screen is an IMAGE reference element (a screenshot), e.g. @twizle-list-priced — the same mechanism as the avatar. In an app chunk (per the @asset YES pattern), positively state "the phone shows @element, the real app screen, held at a natural angle, her taps lining up with the screen". Skin/residue rules do not apply.
 
-CHUNKED OUTPUT — how the ad is actually used: each scene is generated SEPARATELY in the video tool, then stitched in an editor, so continuity must come from a shared block, not from one long prompt.
-- "universalBlock": ONE prose block the user pastes UNCHANGED into every chunk generation. It contains: the character lock (the exact creator — gender, age, vibe, hair, outfit), the setting + lighting, the authenticity + app-interaction + UGC-realism direction, the hard consistency rules (same creator, same outfit, same lighting, same energy in every shot), 9:16 / natural iPhone quality, and an instruction to use the avatar element for the creator's face. It must NOT contain any scene-specific action, camera move, voiceover, or the product reveal — only what stays identical across all chunks.
-- "scenes": each scene is ONLY the swappable part. Its "direction" is the scene-specific camera + action ALONE (never repeat the universal block). The product/app element appears only per the format's @asset pattern (set assetIncluded + asset accordingly). This lets the user paste the universal block once and swap only the scene between generations.
+CHUNKED OUTPUT — each scene is generated SEPARATELY, then stitched in an editor, so continuity comes from a shared block, not one long prompt.
+- "universalBlock": ONE prose block pasted UNCHANGED into every chunk. It contains ONLY what is identical across all chunks AND safe to appear in every shot: the character lock (creator — gender, age, vibe, hair, outfit), the setting + lighting, the authenticity direction, the UGC-realism direction (self-filmed, phone propped off-camera, hands free, natural gestures), the consistency rules (same creator/outfit/lighting/energy), 9:16 / natural iPhone quality, and "use the avatar element for the creator's face". It must contain NO app/phone/screen/UI words and NO negations — it is pasted into app-free chunks, and any app/phone language there makes the model wrongly render a phone. No scene-specific action, camera, or voiceover.
+- "scenes": each scene is ONLY the swappable, scene-specific camera + action, stated positively. A no-app scene (assetIncluded=false) must NOT mention the app, phone, or screen — describe only the creator and what she does in frame. An app scene (assetIncluded=true) positively adds "the phone shows @element, the real app screen". Never repeat the universal block. Never write a negation.
 
 OUTPUT — return ONLY a single JSON object, no prose, no markdown fences:
 {
@@ -47,9 +50,9 @@ OUTPUT — return ONLY a single JSON object, no prose, no markdown fences:
     "hook": "the opening line(s)",
     "analogy": "the tactile analogy line, verbatim as it appears in the script",
     "script": "the full voiceover, exactly as spoken",
-    "universalBlock": "the shared direction block, pasted unchanged into every chunk (character + setting/lighting + direction blocks + consistency rules + avatar element instruction). No scene-specific content.",
+    "universalBlock": "the shared block pasted unchanged into every chunk: character + setting/lighting + authenticity + UGC-realism + consistency rules + avatar element instruction. NO app/phone/screen words and NO negations (it goes into app-free chunks). No scene-specific content.",
     "scenes": [
-      { "beat": "e.g. Hook+Reframe", "voiceover": "the exact line for this scene", "seconds": "5-7", "assetIncluded": false, "asset": "@element-name or empty", "direction": "ONLY the scene-specific camera + action (do not repeat the universal block)", "continuity": "what must match the previous chunk" }
+      { "beat": "e.g. Hook+Reframe", "voiceover": "the exact line for this scene", "seconds": "5-7", "assetIncluded": false, "asset": "@element-name or empty", "direction": "ONLY the scene-specific camera + action, POSITIVE (no negations). A no-app scene never names app/phone/screen; an app scene positively says the phone shows @element", "continuity": "what must match the previous chunk" }
     ],
     "avatarPrompt": "a GPT Image 2 prompt for a candid 9:16 avatar matched to this audience's emotional register",
     "caption": "lowercase organic caption, alludes not sells, <=1 soft emoji, no hashtags",
