@@ -1,6 +1,11 @@
 # The four direction blocks
 
-Paste all four into every script (single-prompt) or every chunk (chunked). Each names the failure mode the AI defaults to and overrides it. Use the **physical-product** wording for creams/devices/cleaning/etc., and the **app/software** wording when the "product" is an app shown on a phone.
+Use the **physical-product** wording for creams/devices/cleaning/etc., and the **app/software** wording when the "product" is an app shown on a phone.
+
+**CRITICAL — negations backfire in video generation.** These blocks are written with "no ___" phrasing for readability, but a video model renders whatever noun you name and ignores the "no" (write "no fake buttons" and it renders buttons). So:
+
+- **Single-prompt:** fine to include all four — the product appears in that one video anyway.
+- **Chunked:** do NOT paste the **B-Roll Sequencing block** (§3) or the **Interaction block** (§2) into product-free chunks — their product/phone words make the model render the product in a shot that should have none (this is the classic "a phone appears in the hook" failure). The **universal block** pasted into every chunk carries ONLY the Authenticity (§1) + UGC-Realism (§4) blocks + character/setting/lighting + the avatar instruction — all product-free. The Interaction block rides only in the chunks where the product appears, phrased positively. Product timing is enforced by **omission** (attach the asset only in its chunk), never by "must not appear" text.
 
 ---
 

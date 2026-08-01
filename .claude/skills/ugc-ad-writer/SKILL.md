@@ -9,6 +9,7 @@ Generates AI-UGC video ads from a strict framework. Works for **physical product
 
 1. **The tactile analogy is the most important line** — the sentence a viewer repeats to a friend. Every script must contain one, in the shape `"Think of it less like ___ and more like ___"`.
 2. **The product never appears on screen until the voiceover names it.** Enforced structurally via `@asset` inclusion: **mid-funnel NO/YES/NO**, **full-stack NO/NO/NO/YES/NO**.
+3. **Write every visual direction POSITIVELY — video models render negated nouns and ignore "no".** Never write "no product", "no phone", "must not appear", "no fake buttons", "no cutaways" — naming a thing to forbid it makes the model render it. State only what IS in frame. Enforce "product not yet" by **omission** (in a product-free chunk, don't mention the product/phone/screen at all *and* attach no asset), never by "no product" text.
 
 ## Workflow
 
@@ -25,7 +26,7 @@ Generates AI-UGC video ads from a strict framework. Works for **physical product
 ## Output contract
 
 - **`single_prompt`** → ONE clean prose prompt block. No headers, no tables, no meta-commentary. Character block → direction blocks → asset reference → b-roll/camera direction → scene/pacing note → `Here's the full script: "..."`.
-- **`chunked`** → the character lock + four direction blocks (paste-into-every-chunk), then per-chunk entries with these fields: chunk # + beat label, exact voiceover line, runtime (sec), `@asset` included (yes/no per the pattern), visual direction, continuity notes. Bookend chunk 1 and the final chunk visually.
+- **`chunked`** → a **universal block** pasted UNCHANGED into every chunk (character lock + setting/lighting + authenticity + UGC-realism + consistency rules + avatar-element instruction), then per-chunk entries: chunk # + beat, exact voiceover line, runtime, `@asset` yes/no per the pattern, scene-specific visual direction, continuity. Bookend chunk 1 and the final chunk. **The universal block must be product-free** (no product/phone/screen words) because it lands in product-free chunks; the app-interaction/product direction rides only in the chunks where the product appears. `universal block + one chunk = one complete prompt`.
 - **Avatar prompt** → always a separate block, GPT Image 2 / 9:16 / natural candid, matched to the audience's emotional register.
 - For **apps/software**: the "product asset" is the app-screen reference element (e.g. a named Higgsfield element); reference it where the pattern says `@asset`. Skin/residue rules don't apply — use the app-adapted direction blocks.
 

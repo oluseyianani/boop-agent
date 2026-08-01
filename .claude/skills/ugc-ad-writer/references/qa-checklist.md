@@ -2,6 +2,8 @@
 
 ## Pre-delivery lint (fix every hit before shipping a script)
 
+- [ ] **Negations in visual direction** — NONE. Video models render negated nouns ("no phone" → a phone; "no fake buttons" → buttons). Every direction states only what IS in frame. Rewrite any "no ___" / "must not appear" positively.
+- [ ] **Universal block is product-free** — in chunked output, the block pasted into every chunk contains zero product/phone/screen words (it lands in product-free chunks). Product-free chunks name nothing about the product; only the product chunk mentions the phone and attaches the asset.
 - [ ] **Rambling hook** — first words call out the audience, not the creator's life/morning/weekend.
 - [ ] **Choppy phrasing** — no stacked two-word fragments; sentences connect and breathe.
 - [ ] **Jargon mechanism** — a 12-year-old understands every word; else replace.
