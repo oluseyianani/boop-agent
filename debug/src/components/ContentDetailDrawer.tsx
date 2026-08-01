@@ -23,6 +23,12 @@ interface IdeaData {
   enemy: string;
   failureMoment?: string;
   angle?: string;
+  keyPoints?: string[]; // informative beats on generated ideas — fed to the ad generator
+  payoff?: string;
+  hook?: string;
+  caption?: string;
+  topic?: string;
+  source?: string; // "generated" for idea-generator output
   keywords?: string[];
   formats?: string[];
 }
@@ -148,11 +154,38 @@ export function ContentDetailDrawer({
         </div>
 
         <div className="debug-scroll flex-1 space-y-4 overflow-y-auto px-5 py-4 text-sm">
-          <Section title="The failure moment" isDark={isDark}>
-            <p className={bodyTextClass(isDark)}>{idea.failureMoment ?? "—"}</p>
+          <Section
+            title={idea.source === "generated" ? "What it teaches" : "The failure moment"}
+            isDark={isDark}
+          >
+            <p className={bodyTextClass(isDark)}>
+              {idea.source === "generated"
+                ? (idea.hook ? `“${idea.hook}”` : idea.title)
+                : (idea.failureMoment ?? "—")}
+            </p>
             {idea.angle && (
               <p className={`mt-1.5 text-xs ${mutedTextClass(isDark)}`}>
                 Execution: {idea.angle}
+              </p>
+            )}
+            {(idea.keyPoints?.length ?? 0) > 0 && (
+              <div className="mt-2">
+                <div className={`mb-1 text-[10px] uppercase tracking-[0.08em] ${mutedTextClass(isDark)}`}>
+                  Key points
+                </div>
+                <ul className={`list-disc space-y-0.5 pl-4 text-xs ${bodyTextClass(isDark)}`}>
+                  {idea.keyPoints!.map((p, i) => (
+                    <li key={i}>{p}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {idea.payoff && (
+              <p className={`mt-2 text-xs ${mutedTextClass(isDark)}`}>Takeaway: {idea.payoff}</p>
+            )}
+            {idea.caption && (
+              <p className={`mt-1.5 text-xs italic ${mutedTextClass(isDark)}`}>
+                Caption: {idea.caption}
               </p>
             )}
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -243,6 +276,8 @@ export function ContentDetailDrawer({
               enemy: idea.enemy,
               failureMoment: idea.failureMoment,
               angle: idea.angle,
+              keyPoints: idea.keyPoints,
+              payoff: idea.payoff,
             }}
           />
 

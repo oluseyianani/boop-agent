@@ -68,7 +68,14 @@ export interface UgcRequest {
   format?: string; // mid_funnel | full_stack | animated_infomercial
   variationType?: string;
   enemy?: string;
-  idea?: { title?: string; enemy?: string; failureMoment?: string; angle?: string };
+  idea?: {
+    title?: string;
+    enemy?: string;
+    failureMoment?: string;
+    angle?: string;
+    keyPoints?: string[]; // the informative beats (generated ideas) — the ad's substance
+    payoff?: string; // the single takeaway — maps to the ad's payoff beat
+  };
   elements?: string[]; // named Higgsfield reference elements available (app screens)
   // viral reference (optional)
   platform?: string;
@@ -92,6 +99,11 @@ export function buildUgcUserText(req: UgcRequest): string {
           i.title && `- concept: ${i.title}`,
           i.failureMoment && `- failure moment: ${i.failureMoment}`,
           i.angle && `- angle: ${i.angle}`,
+          i.keyPoints?.length &&
+            `- key points to teach (the ad's substance — weave these into the script):\n${i.keyPoints
+              .map((p) => `  - ${p}`)
+              .join("\n")}`,
+          i.payoff && `- payoff/takeaway (land this in the payoff beat): ${i.payoff}`,
         ]
           .filter(Boolean)
           .join("\n"),

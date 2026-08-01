@@ -16,6 +16,8 @@ interface IdeaContext {
   enemy?: string;
   failureMoment?: string;
   angle?: string;
+  keyPoints?: string[];
+  payoff?: string;
 }
 
 // Composer for an idea's UGC briefs. Rigid fields (scene / actor / camera /

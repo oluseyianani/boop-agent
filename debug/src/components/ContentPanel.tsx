@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api.js";
 import { ContentDetailDrawer } from "./ContentDetailDrawer.js";
 import { ClipLibrary } from "./ClipLibrary.js";
+import { ContentIdeaGenerator } from "./ContentIdeaGenerator.js";
 import { MarkPostedModal } from "./MarkPostedModal.js";
 import {
   EmptyState,
@@ -126,8 +127,10 @@ function ProjectView({
   onSelectProject: (id: string) => void;
 }) {
   const project = projects.find((p) => p.projectId === projectId)!;
+  const deleteIdea = useMutation(api.content.deleteIdea);
   const [detail, setDetail] = useState<{ ideaId: string; format?: string } | null>(null);
   const [markTarget, setMarkTarget] = useState<MarkTarget | null>(null);
+  const [generating, setGenerating] = useState(false);
   const config = useMemo(() => {
     try {
       return JSON.parse(project.config) as Record<string, unknown> & {
@@ -174,6 +177,36 @@ function ProjectView({
     for (const idea of ideas ?? []) map[idea.ideaId] = idea.title;
     return map;
   }, [ideas]);
+
+  // Product context for the generator's caption CTA + the titles already in the
+  // bank so the model doesn't repeat them. Also flag which ideas are generated
+  // (those get a delete action and a topic tag; imported enemy ideas don't).
+  const product = useMemo(
+    () =>
+      [config.productBlurb, config.positioning]
+        .filter((v): v is string => typeof v === "string" && v.length > 0)
+        .join(" — "),
+    [config],
+  );
+  const existingTitles = useMemo(() => (ideas ?? []).map((i) => i.title), [ideas]);
+  const ideaMeta = useMemo(() => {
+    const map: Record<string, { generated: boolean; topic?: string }> = {};
+    for (const idea of ideas ?? []) {
+      try {
+        const d = JSON.parse(idea.data) as { source?: string; topic?: string };
+        map[idea.ideaId] = { generated: d.source === "generated", topic: d.topic };
+      } catch {
+        map[idea.ideaId] = { generated: false };
+      }
+    }
+    return map;
+  }, [ideas]);
+
+  async function onDeleteIdea(ideaId: string, title: string) {
+    if (!window.confirm(`Delete "${title}"? This removes it from the bank.`)) return;
+    await deleteIdea({ projectId, ideaId });
+    if (detail?.ideaId === ideaId) setDetail(null);
+  }
 
   const slotsByDate = useMemo(() => {
     const groups = new Map<string, SlotRow[]>();
@@ -269,10 +302,25 @@ function ProjectView({
       </section>
 
       <section className={panelCardClass(isDark, "p-4")}>
-        <h3 className="text-sm font-medium">Idea bank</h3>
-        <p className={`mt-0.5 text-xs ${mutedTextClass(isDark)}`}>
-          One enemy per idea. Cooldown {cooldownDays} days per execution.
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-medium">Idea bank</h3>
+            <p className={`mt-0.5 text-xs ${mutedTextClass(isDark)}`}>
+              One enemy per idea. Cooldown {cooldownDays} days per execution.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setGenerating(true)}
+            className={`shrink-0 rounded-lg border px-2.5 py-1 text-[11px] font-medium ${
+              isDark
+                ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300 hover:bg-emerald-400/20"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+            }`}
+          >
+            Generate ideas
+          </button>
+        </div>
         <div className="mt-3 overflow-x-auto">
           {!ideas?.length ? (
             <EmptyState isDark={isDark}>No ideas imported yet.</EmptyState>
@@ -293,6 +341,7 @@ function ProjectView({
                   .sort((a, b) => Number(a.retired) - Number(b.retired) || a.title.localeCompare(b.title))
                   .map((idea) => {
                     const u = usage?.[idea.ideaId];
+                    const meta = ideaMeta[idea.ideaId];
                     const lastPosted = u?.lastPostedAt;
                     const cooling =
                       !idea.retired && lastPosted !== undefined &&
@@ -306,10 +355,21 @@ function ProjectView({
                         }`}
                       >
                         <td className="py-2 pr-3">
-                          <div className="font-medium">{idea.title}</div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium">{idea.title}</span>
+                            {meta?.generated && (
+                              <span className={`rounded border px-1 py-0.5 text-[9px] font-medium uppercase tracking-[0.06em] ${
+                                isDark ? "border-sky-400/20 bg-sky-400/10 text-sky-300" : "border-sky-200 bg-sky-50 text-sky-700"
+                              }`}>
+                                generated
+                              </span>
+                            )}
+                          </div>
                           <div className={`mono text-[10px] ${mutedTextClass(isDark)}`}>{idea.ideaId}</div>
                         </td>
-                        <td className="py-2 pr-3">{idea.enemy}</td>
+                        <td className="py-2 pr-3">
+                          {idea.enemy || (meta?.topic ? <span className={mutedTextClass(isDark)}>{meta.topic}</span> : "—")}
+                        </td>
                         <td className="py-2 pr-3 mono">{u?.timesUsed ?? 0}</td>
                         <td className="py-2 pr-3">{lastPosted ? formatWhen(lastPosted) : "—"}</td>
                         <td className="py-2 pr-3">
@@ -320,20 +380,39 @@ function ProjectView({
                           />
                         </td>
                         <td className="py-2 text-right">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setMarkTarget({ ideaId: idea.ideaId, ideaTitle: idea.title });
-                            }}
-                            className={`rounded-lg border px-2 py-0.5 text-[10px] font-medium ${
-                              isDark
-                                ? "border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10"
-                                : "border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100"
-                            }`}
-                          >
-                            mark posted
-                          </button>
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMarkTarget({ ideaId: idea.ideaId, ideaTitle: idea.title });
+                              }}
+                              className={`rounded-lg border px-2 py-0.5 text-[10px] font-medium ${
+                                isDark
+                                  ? "border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10"
+                                  : "border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100"
+                              }`}
+                            >
+                              mark posted
+                            </button>
+                            {meta?.generated && (
+                              <button
+                                type="button"
+                                aria-label={`Delete ${idea.title}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void onDeleteIdea(idea.ideaId, idea.title);
+                                }}
+                                className={`rounded-lg border px-2 py-0.5 text-[10px] font-medium ${
+                                  isDark
+                                    ? "border-white/10 bg-white/5 text-zinc-400 hover:bg-rose-500/10 hover:text-rose-300"
+                                    : "border-zinc-200 bg-zinc-50 text-zinc-500 hover:bg-rose-50 hover:text-rose-600"
+                                }`}
+                              >
+                                delete
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -402,6 +481,16 @@ function ProjectView({
           ideaRow={ideas?.find((i) => i.ideaId === detail.ideaId) ?? null}
           highlightFormat={detail.format}
           onClose={() => setDetail(null)}
+        />
+      )}
+
+      {generating && (
+        <ContentIdeaGenerator
+          isDark={isDark}
+          projectId={projectId}
+          product={product || undefined}
+          existingTitles={existingTitles}
+          onClose={() => setGenerating(false)}
         />
       )}
 

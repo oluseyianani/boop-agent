@@ -84,7 +84,14 @@ export function ViralTeardownModal({
   isDark: boolean;
   projectId: string;
   product?: string;
-  idea?: { title?: string; enemy?: string; failureMoment?: string; angle?: string };
+  idea?: {
+    title?: string;
+    enemy?: string;
+    failureMoment?: string;
+    angle?: string;
+    keyPoints?: string[];
+    payoff?: string;
+  };
   elements?: string[];
   onClose: () => void;
   onUse: (brief: Partial<UgcBrief>, refId: string) => void;

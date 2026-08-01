@@ -33,6 +33,7 @@ import {
 import { startImageCleanup } from "./images/clean.js";
 import { isPublicServerRequest, isTrustedLocalRequest } from "./local-access.js";
 import { analyzeTeardown, type UgcRequest } from "./content/teardown.js";
+import { generateContentIdeas, type IdeaGenRequest } from "./content/ideas.js";
 
 async function main() {
   await loadIntegrations();
@@ -99,6 +100,28 @@ async function main() {
         frameStorageIds: arr(body.frameStorageIds)?.slice(0, 8),
       });
       res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Generate a batch of informative, standalone content ideas for the desk's
+  // idea bank (content desk — the top of the funnel). The video teaches; the app
+  // lives only in the caption CTA. No enemy.
+  app.post("/content/ideas", async (req, res) => {
+    try {
+      const body = (req.body ?? {}) as Partial<IdeaGenRequest>;
+      const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+      const arr = (v: unknown) =>
+        Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : undefined;
+      const count = Math.max(1, Math.min(20, Math.floor(Number(body.count)) || 5));
+      const ideas = await generateContentIdeas({
+        product: str(body.product),
+        count,
+        topics: str(body.topics),
+        avoidTitles: arr(body.avoidTitles)?.slice(0, 120),
+      });
+      res.json({ ideas });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }

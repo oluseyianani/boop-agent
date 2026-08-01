@@ -84,6 +84,30 @@ export const upsertIdea = mutation({
   },
 });
 
+// Delete an idea outright (used to dismiss generated ideas from the bank).
+// Also clears its scripts so no orphan script rows linger.
+export const deleteIdea = mutation({
+  args: { projectId: v.string(), ideaId: v.string() },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("contentIdeas")
+      .withIndex("by_project_idea", (q) =>
+        q.eq("projectId", args.projectId).eq("ideaId", args.ideaId),
+      )
+      .unique();
+    if (!existing) return null;
+    const scripts = await ctx.db
+      .query("contentScripts")
+      .withIndex("by_project_idea", (q) =>
+        q.eq("projectId", args.projectId).eq("ideaId", args.ideaId),
+      )
+      .collect();
+    for (const s of scripts) await ctx.db.delete(s._id);
+    await ctx.db.delete(existing._id);
+    return existing._id;
+  },
+});
+
 // Patch only the creative pack of an idea (the UGC briefs live here as a JSON
 // blob). Used by the brief composer — keeps the rest of the idea untouched.
 export const setIdeaCreative = mutation({
